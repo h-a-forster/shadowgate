@@ -425,6 +425,21 @@ def test_skipped_error_drives_status_when_all_graded() -> None:
     assert not any("proxy" in n for n in s.notes)
 
 
+def test_audit_only_status_when_references_drive_status() -> None:
+    # 20 graded skipped cases, none wrong (status ok on references); 4 of 20 audits disagree
+    # with the audit tier, so the audit alone gives a different status.
+    ds = [skipped(k, correct=True, equivalent=k >= 4) for k in range(20)]
+    s = summarize(ds, tolerance=0.2)
+    assert s.status_metric == "skipped_error" and s.status == "ok"
+    assert s.audit_only_status == "inconclusive"
+    assert summarize(ds).audit_only_status is None  # no tolerance
+
+
+def test_audit_only_status_unset_when_disagreement_drives_status() -> None:
+    s = summarize(mixed_serve(17, 3), tolerance=0.1)
+    assert s.status_metric == "disagreement" and s.audit_only_status is None
+
+
 def test_partial_references_fall_back_to_disagreement() -> None:
     ds = [skipped(k, correct=True) for k in range(5)]
     ds += [skipped(10 + k, equivalent=k > 0) for k in range(5)]

@@ -48,6 +48,7 @@ Serve mode: confidence threshold 0.55, stratified shadow audits
   cost per task           $0.000379
   est. savings vs slow    54.8% [53.6%, 55.9%]
   audit status            breach (tolerance 5.0%)
+  audit-only status       breach (disagreement, no references)
 
 Eval mode: every tier on every task, threshold sweep
   only:fast               accuracy 57.0% [52.1%, 61.8%]       cost/task $0.000027
@@ -62,7 +63,8 @@ The fast tier reports 95% mean confidence on the answers it keeps; the audit est
 The demo config sets the threshold too low on purpose. The fast tier answers 65% of tasks without
 escalating and is overconfident on them: the audit puts disagreement on skipped cases at 10.8%,
 and grading against references puts the error at 12.3%. The lower bound of the error interval
-(8.9%) is above the 5% tolerance, so the status is `breach`. The eval-mode sweep recommends 0.89
+(8.9%) is above the 5% tolerance, so the status is `breach`; the audit alone, without
+references, also gives `breach`. The eval-mode sweep recommends 0.89
 instead. The demo writes `shadowgate-demo/report.html` and prints the `audit`, `sweep` and
 `calibrate` commands to explore the two runs.
 
@@ -163,13 +165,31 @@ Claude Code CLI with Haiku at effort `low`; costs are list-price estimates, not 
 |---|---|---|
 | Haiku only | 95.0% (91.0-97.3) | $0.00047 |
 | Opus only | 100.0% (98.1-100.0) | $0.0115 |
-| Cascade, threshold 0.80 | 98.5% (95.7-99.5) | $0.0016 |
+| Cascade, threshold 0.80, serving only | 98.5% (95.7-99.5) | $0.0016 |
+| Cascade, threshold 0.80, serving + audit | 98.5% (95.7-99.5) | $0.0046 |
 | Oracle router (cost lower bound) | 100.0% | $0.0010 |
 
-Haiku answered 181 of 200 tasks without escalating. Its error on those skipped cases, against
-references, was 1.7% (95% CI 0.6-4.8%), so the upper bound of 4.8% passes a 5% tolerance,
-narrowly. The errors sit near the threshold: Opus disagreed with 2 of 15 audited answers in the
-[0.80, 0.90) bin (13.3%, 95% CI 1.7-40.5%), against 0 of 36 above 0.90.
+The serve run spent $0.31 on serving and $0.60 on shadow audits (audit overhead 192%; the audit
+rates were set high so 200 tasks give a usable sample). Serving alone costs 86% less than Opus
+alone; all-in, with the audit, the saving is 60%.
+
+Haiku answered 181 of 200 tasks without escalating. Two statuses against a 5% tolerance:
+
+| Skipped-case rate | Based on | Estimate (95% CI) | Status |
+|---|---|---|---|
+| Error vs references | all 181 skipped cases, graded | 1.7% (0.6-4.8) | ok |
+| Disagreement with Opus (audit only) | 51 audited cases, weighted | 2.5% (0.1-12.7) | inconclusive |
+
+The `ok` comes from grading every skipped case against its reference, which production traffic
+does not allow. The audit by itself, which is what shadowgate reports when there are no
+references, is inconclusive at this sample size. The errors sit near the threshold: Opus disagreed
+with 2 of 15 audited answers in the [0.80, 0.90) bin (13.3%, 95% CI 1.7-40.5%), against 0 of 36
+above 0.90.
+
+Main limitation: Opus answered all 200 tasks correctly, so on this dataset disagreement with Opus
+equals error by construction. The run does not test the case the audit exists for, a final tier
+that is itself sometimes wrong. Costs are Claude Code CLI list-price estimates, dominated by CLI
+prompt overhead; see [docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#limitations).
 
 Setup, per-bin tables and caveats: [docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md). Full report:
 [arithmetic-haiku-opus.html](https://h-a-forster.github.io/shadowgate/results/arithmetic-haiku-opus.html).

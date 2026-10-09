@@ -19,7 +19,9 @@ Raw decisions: [`experiments/arithmetic-haiku-opus/`](../experiments/arithmetic-
 
 Two runs share one response cache. The eval run calls both tiers on every task. The serve run
 routes normally and audits a sample of the skipped cases; every call it makes is a cache hit, so the
-two runs see identical model outputs.
+two runs see identical model outputs. In particular, each serve-run audit replays the Opus answer
+from the eval run, so the audit does not capture run-to-run variation in the final tier's answers;
+a fresh Opus call could disagree with its own earlier answer.
 
 ## Results
 
@@ -27,12 +29,15 @@ two runs see identical model outputs.
 |---|---|---|---|
 | Haiku only | 95.0% (91.0-97.3) | $0.00047 | - |
 | Opus only | 100.0% (98.1-100.0) | $0.0115 | - |
-| Cascade, threshold 0.80 | 98.5% (95.7-99.5) | $0.0016 | 9.5% |
+| Cascade, threshold 0.80, serving only | 98.5% (95.7-99.5) | $0.0016 | 9.5% |
+| Cascade, threshold 0.80, serving + audit (serve run) | 98.5% (95.7-99.5) | $0.0046 | 9.5% |
 | Cascade, threshold 0.85 (sweep pick) | 99.0% (96.4-99.7) | $0.0024 | 16.5% |
 | Oracle router (cost lower bound) | 100.0% | $0.0010 | 5.0% |
 
-At threshold 0.80 the cascade costs 86.5% less than Opus alone (95% CI 85.6-87.3%) and loses 1.5
-points of accuracy. The sweep's `max-savings` objective (accuracy within 1 point of Opus) picked
+At threshold 0.80 the cascade's serving cost is 86.5% less than Opus alone (95% CI 85.6-87.3%)
+and it loses 1.5 points of accuracy. That figure excludes the audit. The serve run spent $0.3136 on
+serving and $0.6030 on audits ($0.9166 in all, $0.0046 per task, audit overhead 192%); all-in, the
+saving against Opus alone ($0.0115 per task) is 60%. The other rows exclude audit spend. The sweep's `max-savings` objective (accuracy within 1 point of Opus) picked
 0.85 on a 140-task selection split. On the 60 held-out tasks it scored 98.3%, just under the target;
 the report flags this. With 60 held-out tasks the interval is wide (91.1-99.7%).
 
@@ -51,6 +56,7 @@ of them with Opus.
 | [0.90, 0.95) | 30 | 16 | 0% (0.0-20.6) | 3.3% (0.6-16.7) |
 | [0.95, 1.00] | 107 | 20 | 0% (0.0-16.8) | 0% (0.0-3.5) |
 | All skipped | 181 | 51 | 2.5% (0.1-12.7), weighted | 1.7% (0.6-4.8) |
+| Status vs 5% tolerance | | | inconclusive (audit only) | ok (all 181 graded) |
 
 - Three skipped cases were wrong, at confidence 0.80, 0.85 and 0.93. All three were off by a factor
   of about 3 to 4 (for example 816 where the reference is 3432).
@@ -58,10 +64,40 @@ of them with Opus.
 - The weighted disagreement estimate (2.5%) agrees with the full error count (1.7%) but its interval
   is much wider, because it rests on 51 audits rather than 181 graded answers. On production traffic
   without reference answers, the audit estimate is what you get.
-- Against a 5% tolerance the run passes: the upper bound on skipped-case error is 4.8%.
+- Two statuses, against a 5% tolerance. With references, `shadowgate audit` grades all 181
+  skipped cases and reports `ok` (upper bound 4.8%); this is the status the published report
+  shows, and it does not depend on the audit sample. From the 51 audits alone the status is
+  `inconclusive` (upper bound 12.7%); that is the status a run without references would get. The
+  report and `shadowgate audit` now print both when references are present.
 - Audit spend was 1.9x the serving spend. Audits run on Opus, which costs about 25x Haiku per task;
   the audit rates here were set high so a 200-task run yields a usable sample. At a flat 5% audit
   rate the overhead would be about 0.3x.
+
+## Coverage check (offline)
+
+Because the eval run called Opus on every task, the audit can be re-drawn offline.
+[`simulate_audit.py`](../experiments/arithmetic-haiku-opus/simulate_audit.py) draws the serve-mode
+audit sample 1000 times (seeds 0-999, same strata: inclusion probability 0.5 below confidence 0.95,
+0.2 above), strips the references so only the audit counts, and checks the weighted 95% interval
+against the true skipped-case rate (3 of 181, 1.66%, graded against references). No model calls:
+
+```sh
+uv run python experiments/arithmetic-haiku-opus/simulate_audit.py
+```
+
+| | |
+|---|---|
+| Audits per draw | mean 58.3 (40-80) |
+| Mean point estimate | 1.69% (true 1.66%) |
+| Interval covers the true rate | 1000 of 1000 draws (100.0%) |
+| Draws with no disagreement observed | 11.0% |
+| Upper bound | median 10.3%, 5th-95th percentile 7.7-13.5% |
+| Status vs 5% tolerance | inconclusive in 1000 of 1000 draws |
+
+The weighted estimate is unbiased here and the Korn-Graubard interval is conservative (it never
+missed, against 95% nominal). The cost is width: at this audit size the upper bound never fell
+below 5%, so the audit alone could not have confirmed the tolerance on any draw. This checks one
+population with three errors; it is not a general coverage result.
 
 ## Reproduce
 
@@ -81,10 +117,22 @@ shadowgate report --ledger tmp/ledger.sqlite --run-id serve --sweep-run-id eval 
 
 ## Limitations
 
+- **Opus was 100% correct on all 200 tasks, so disagreement with Opus equals error by
+  construction.** This is the main limitation of the result: it does not exercise a final tier
+  that makes its own mistakes, where disagreement and error diverge and errors both tiers share go
+  unseen.
 - One task family, 200 tasks, one run. Read the confidence intervals, not the point estimates.
 - Arithmetic has exact reference answers. Most production tasks do not, and there the audit reports
   disagreement with the final tier, not error.
 - Costs are list-price estimates from the shadowgate price table. Through the Claude Code CLI on a
   subscription, no per-call charge applies.
+- The measured costs are dominated by Claude Code CLI overhead. Each Opus call writes about 1000
+  prompt-cache tokens at the 1-hour rate (about $0.008) against about 176 output tokens (about
+  $0.0035), for $0.0115 per call. Sent directly to the API with only the task prompt (about 250
+  input tokens), an Opus call would cost about $0.0045. Haiku calls carry the same overhead
+  ($0.00047 measured, about $0.0003 direct). The cost ratios above are therefore specific to the
+  CLI backend.
+- Serve-run audits were cache hits from the eval run, so they reuse one Opus answer per task and
+  do not capture the final tier's run-to-run variance.
 - Latency is not reported: each call starts a CLI process, which dominates the timing.
 - The held-out split is 60 tasks, too small to confirm a 1-point accuracy target.

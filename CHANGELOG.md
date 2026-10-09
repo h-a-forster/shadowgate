@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `AuditSummary.audit_only_status`: when references drive the status, the status the audit
+  disagreement alone would give. The report and `shadowgate audit` show it next to the
+  reference-based status; the demo prints it as `audit-only status`.
+- `experiments/arithmetic-haiku-opus/simulate_audit.py`: offline coverage check of the audit
+  interval on the recorded run.
+
+### Changed
+
+- Results docs report both statuses, all-in cost including audit spend, and the limitations of the
+  published run (final tier 100% correct, CLI cost overhead, cached serve-run audits).
+
 ## [0.1.0] - 2026-10-10
 
 Initial release.

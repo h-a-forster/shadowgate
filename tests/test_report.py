@@ -572,3 +572,21 @@ def test_methodology_mentions_nonresponse_kg_and_optional_stopping(eval_run) -> 
     doc = render_html(s, now=NOW)
     for phrase in ("missing at random", "Korn-Graubard", "fixed-sample", "stricter confidence"):
         assert phrase in doc
+
+
+def test_audit_only_status_is_shown_next_to_reference_status(eval_run) -> None:
+    s, _ = eval_run
+    est = Estimate(0.04, 0.01, 0.13, 51, "hajek-korn-graubard", 0.95, n_eff=42.0)
+    both = dataclasses.replace(
+        s,
+        status="ok",
+        status_metric="skipped_error",
+        disagreement=est,
+        audit_only_status="inconclusive",
+        tolerance=0.05,
+    )
+    txt = render_text(both)
+    assert "From the audit alone" in txt and "INCONCLUSIVE" in txt
+    assert "From the audit alone" not in render_text(
+        dataclasses.replace(both, audit_only_status=None)
+    )

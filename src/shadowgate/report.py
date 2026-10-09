@@ -384,7 +384,15 @@ def _status_parts(summary: AuditSummary) -> tuple[str, str]:
         why = "No tolerance set; the status is not evaluated."
     else:
         why = ""
-    return label, why
+    if summary.audit_only_status is not None and summary.disagreement is not None:
+        d = summary.disagreement
+        why += (
+            f" From the audit alone (weighted disagreement {fmt_pct(d.value)}, interval "
+            f"{fmt_pct(d.lo)}-{fmt_pct(d.hi)}) the status would be "
+            f"{_STATUS_LABEL.get(summary.audit_only_status, summary.audit_only_status)}; "
+            "that is what a run without references reports."
+        )
+    return label, why.strip()
 
 
 def _headline_segments(summary: AuditSummary) -> list[Segment]:
