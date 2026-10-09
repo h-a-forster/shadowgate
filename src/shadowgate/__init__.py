@@ -1,10 +1,12 @@
-"""shadowgate: confidence-gated model cascades that audit what they skip.
+"""shadowgate: confidence-gated LLM cascades that measure how often the cheap tier is wrong on the
+cases it answers alone.
 
 A :class:`Cascade` routes each :class:`Task` through model tiers: a cheap tier answers first,
 a confidence estimator scores the answer, and low-confidence answers escalate to the next
-tier. Accepted ("skipped") answers are shadow-audited by the reference tier with known
+tier. Skipped cases (answered by a non-final tier without escalating) are shadow-audited by
+the final tier with known
 inclusion probabilities, so :func:`summarize` can estimate how often the fast path is wrong
-on the cases it keeps, with confidence intervals. Eval-mode runs feed :func:`run_sweep`, which
+on the skipped cases, with confidence intervals. Eval-mode runs feed :func:`run_sweep`, which
 draws the accuracy/cost Pareto curve and recommends thresholds.
 
 Typical use::

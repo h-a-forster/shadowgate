@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 import importlib.util
 import subprocess
 import sys
@@ -83,7 +84,16 @@ def test_dir_lists_public_names() -> None:
 
 def test_version_matches_pyproject() -> None:
     meta = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert shadowgate.__version__ == meta["project"]["version"]
+    project = meta["project"]
+    if "version" in project:
+        assert shadowgate.__version__ == project["version"]
+        return
+    assert "version" in project.get("dynamic", []), "pyproject has no static or dynamic version"
+    try:
+        installed = importlib.metadata.version(project["name"])
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip(f"distribution {project['name']!r} is not installed")
+    assert shadowgate.__version__ == installed
 
 
 def test_import_does_not_load_optional_or_lazy_modules() -> None:

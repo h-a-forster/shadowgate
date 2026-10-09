@@ -1,8 +1,8 @@
-"""Audit summaries: how often the fast path is wrong on the cases it kept.
+"""Audit summaries: how often the fast path is wrong on the skipped cases.
 
 :func:`summarize` turns the decisions of one run into an :class:`AuditSummary`. Its headline
 number is the skipped-case disagreement rate: among decisions answered by a non-final tier
-without escalation ("skipped" cases), the share whose answer differs from the reference (audit)
+without escalation ("skipped" cases), the share whose answer differs from the final (audit)
 tier. In serve mode only a sample of skipped cases is shadow-audited, each with a known
 inclusion probability pi, so the rate is a Hajek (inverse-probability weighted) estimate with
 weights 1/(pi * r_h), where r_h is the audit response rate of the case's pi stratum (see
@@ -15,9 +15,9 @@ Conventions
   cascade's tier order is inferred (:func:`infer_tier_order`): attempt sequences are merged
   longest-first, and the final tier is the tier whose attempts carry ``threshold=None`` (the
   cascade never gives the final tier a threshold). If no final-tier attempt was ever observed
-  (every decision was accepted early), the shadow audit tier is used when it is not one of the
-  observed tiers; otherwise the final tier is unknown and every observed tier counts as
-  non-final.
+  (every decision was answered by a non-final tier), the shadow audit tier is used when it is
+  not one of the observed tiers; otherwise the final tier is unknown and every observed tier
+  counts as non-final.
 * **Skipped case.** A decision without ``error`` whose served attempt (the accepted attempt of
   ``final_tier``) is at a non-final tier. Decisions with ``error`` are counted in ``n_errors``
   and excluded from tier shares, skipped cases and cost-per-task figures they cannot inform.
@@ -47,8 +47,8 @@ Conventions
   note is added and an ``ok`` status from the disagreement is downgraded to ``inconclusive``
   (``sparse_strata`` counts such strata). The rule depends only on the design and on how many
   audits completed, never on the observed outcomes, so it cannot be gamed by the data.
-* **Eval mode.** The served attempt's ``agreement`` (vs the last tier) is the audit, pi = 1. A
-  missing agreement because the last tier failed counts as an audit error.
+* **Eval mode.** The served attempt's ``agreement`` (vs the final tier) is the audit, pi = 1. A
+  missing agreement because the final tier failed counts as an audit error.
 * **Status.** ``skipped_error`` drives the status when every skipped case is graded against a
   reference; otherwise ``disagreement`` does. ``breach`` if lo > tolerance, ``ok`` if
   hi <= tolerance, else ``inconclusive``; ``no-data`` when the metric has no observations;
@@ -62,12 +62,12 @@ Conventions
 * **Resolving an inconclusive status.** ``audits_to_resolve`` estimates the additional audits
   needed if the rate holds. It is None when more audits cannot help: when the status uses
   ``skipped_error`` (every skipped case is already graded) or every skipped case is already
-  audited (pi = 1). ``tasks_to_resolve`` estimates the additional skipped cases (tasks accepted by
-  the fast path) needed in every inconclusive case, at the current audit rate.
+  audited (pi = 1). ``tasks_to_resolve`` estimates the additional skipped cases (tasks answered by
+  the fast path alone) needed in every inconclusive case, at the current audit rate.
 * **Confidence bins.** Edges ``bins`` define half-open bins ``[e_i, e_{i+1})``; the last bin is
   closed. Scores below the first edge fall into the first bin, scores above the last edge into
   the last bin. Skipped cases without a score (None/NaN, only possible with hand-built records)
-  are summarised separately in ``no_score_bin`` (``lo = hi = nan``, label "no score").
+  are summarized separately in ``no_score_bin`` (``lo = hi = nan``, label "no score").
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ class AuditSummary:
     mode: str  # "serve" | "eval" | "mixed" | "n/a" (empty input)
     n_decisions: int
     n_errors: int
-    n_skipped: int  # accepted at a non-final tier (decisions without error)
+    n_skipped: int  # answered at a non-final tier (decisions without error)
     escalation_rate: Estimate  # share of decisions escalated past tier 0 (all decisions)
     tier_share: dict[str, int]  # decisions served per tier (decisions without error)
     n_audited: int
@@ -147,7 +147,7 @@ class AuditSummary:
     cost_per_task: float | None  # cost_serving / decisions with known serving cost
     audit_overhead: float | None  # cost_audit / cost_serving
     est_all_slow_cost_per_task: Estimate | None
-    est_savings: Estimate | None  # 1 - cost_per_task / all-slow cost per task
+    est_savings: Estimate | None  # 1 - cost_per_task / always-final-tier cost per task
     tolerance: float | None
     status: str  # "ok" | "breach" | "inconclusive" | "no-data" | "n/a"
     audits_to_resolve: int | None
@@ -310,7 +310,7 @@ def _pi_strata(cases: Sequence[_Case]) -> list[_Stratum]:
 
 
 def _weighted_mean(xs: Sequence[float], ws: Sequence[float], level: float) -> Estimate | None:
-    """Hajek weighted mean with a linearised normal interval (mean_ci when weights are equal)."""
+    """Hajek weighted mean with a linearized normal interval (mean_ci when weights are equal)."""
     if not xs:
         return None
     if all(w == ws[0] for w in ws):
@@ -429,7 +429,7 @@ def summarize(
     bins: Sequence[float] = DEFAULT_BINS,
     level: float = 0.95,
 ) -> AuditSummary:
-    """Summarise one run's decisions; see the module docstring for definitions.
+    """Summarize one run's decisions; see the module docstring for definitions.
 
     Raises ValueError when the decisions come from more than one run, for malformed ``bins`` or
     a ``tolerance`` outside [0, 1]. Never raises on empty input or on decisions with errors.
@@ -443,7 +443,7 @@ def summarize(
     z_for(level)  # validates level
     run_ids = sorted({d.run_id for d in decisions})
     if len(run_ids) > 1:
-        raise ValueError(f"decisions span {len(run_ids)} runs {run_ids[:5]}; summarise per run")
+        raise ValueError(f"decisions span {len(run_ids)} runs {run_ids[:5]}; summarize per run")
     notes: list[str] = []
     run_id = run_ids[0] if run_ids else ""
     modes = sorted({d.mode for d in decisions})
@@ -731,7 +731,7 @@ def summarize(
                     "because a large stratum has too few completed audits (see above)."
                 )
 
-    # ---- expected wrong-but-kept answers
+    # ---- expected wrong skipped cases
     expected_wrong: tuple[float, float, float] | None = None
     wrong_source: str | None = None
     rate, wrong_source = (

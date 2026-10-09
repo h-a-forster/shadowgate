@@ -26,7 +26,7 @@ References
 * Clopper, C. J. & Pearson, E. S. (1934). The use of confidence or fiducial limits illustrated in
   the case of the binomial.
 * Hajek, J. (1971); Sarndal, Swensson & Wretman (1992), *Model Assisted Survey Sampling*,
-  ch. 5.7 (ratio estimator and its Taylor-linearised variance).
+  ch. 5.7 (ratio estimator and its Taylor-linearized variance).
 * Kish, L. (1965). *Survey Sampling* (effective sample size under unequal weighting).
 * Korn, E. L. & Graubard, B. I. (1998). Confidence intervals for proportions with small expected
   number of positive counts estimated from survey data. *Survey Methodology* 24(2), 193-201.
@@ -405,7 +405,7 @@ def weighted_proportion(
     With inclusion probabilities pi_i and weights w_i = 1/pi_i:
 
     * point estimate   p = sum(w y) / sum(w)
-    * linearised var   v = sum(w^2 (y - p)^2) / (sum w)^2   (Taylor linearisation of the ratio,
+    * linearized var   v = sum(w^2 (y - p)^2) / (sum w)^2   (Taylor linearization of the ratio,
       with-replacement approximation: ignores the finite-population correction, so it is mildly
       conservative for Poisson/Bernoulli sampling without replacement)
     * Kish effective n n_kish = (sum w)^2 / sum(w^2)
@@ -413,7 +413,7 @@ def weighted_proportion(
 
     The effective size is n_eff = min(n_kish, n_lin) (n_kish alone when p is 0 or 1): the
     smaller of the two accounts both for the dispersion of the weights (Kish) and for errors
-    concentrated in heavily weighted units (linearisation), which Kish's formula ignores.
+    concentrated in heavily weighted units (linearization), which Kish's formula ignores.
     ``Estimate.n_eff`` reports it.
 
     ``method`` picks the interval evaluated at (p, n_eff):

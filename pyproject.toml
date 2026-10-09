@@ -3,9 +3,9 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "shadowgate"
-version = "0.1.0"
-description = "Confidence-gated LLM model cascades (System 1.5 routing) that audit the cases they skip: shadow-sampled error estimates with confidence intervals, threshold sweeps and accuracy/cost Pareto curves."
+name = "shadowgate-llm"
+dynamic = ["version"]
+description = "Confidence-gated LLM cascades that measure how often the cheap tier is wrong on the cases it answers alone: shadow audits with confidence intervals, threshold sweeps, accuracy/cost Pareto curves."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -31,11 +31,21 @@ dependencies = []
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.70"]
 
+[project.urls]
+Homepage = "https://github.com/h-a-forster/shadowgate"
+Documentation = "https://github.com/h-a-forster/shadowgate/blob/main/docs/guide.md"
+Source = "https://github.com/h-a-forster/shadowgate"
+Issues = "https://github.com/h-a-forster/shadowgate/issues"
+Changelog = "https://github.com/h-a-forster/shadowgate/blob/main/CHANGELOG.md"
+
 [project.scripts]
 shadowgate = "shadowgate.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "anthropic>=0.70"]
+
+[tool.hatch.version]
+path = "src/shadowgate/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shadowgate"]

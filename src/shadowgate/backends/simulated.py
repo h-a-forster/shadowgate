@@ -65,7 +65,7 @@ class SimulatedBackend:
       ``sha256(seed|name|task_id|k|purpose)``. Samples are independent given the task.
     * A correct sample answers ``task.reference``. A wrong sample answers a plausible
       perturbation that never equals the reference: with probability ``systematic_error`` the
-      task's "favourite" mistake (shared by all samples of that task, as real models repeat
+      task's "favorite" mistake (shared by all samples of that task, as real models repeat
       their mistakes), otherwise a mistake drawn per sample. Numeric references get small
       offsets or a x10 / /10 slip; choice letters get another letter; yes/no and true/false
       flip; other text gets ``"not <ref>"`` or a distractor. Wrong samples therefore agree with

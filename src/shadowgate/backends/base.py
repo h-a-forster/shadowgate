@@ -22,7 +22,7 @@ RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504, 529})
 class TransientError(Exception):
     """Raised inside a backend call to signal a retryable failure.
 
-    ``retry_after`` (seconds) is honoured when the provider supplied one.
+    ``retry_after`` (seconds) is honored when the provider supplied one.
     """
 
     def __init__(self, message: str, *, status: int | None = None,
@@ -34,7 +34,7 @@ class TransientError(Exception):
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    """Exponential backoff with full jitter, capped, honouring Retry-After."""
+    """Exponential backoff with full jitter, capped, honoring Retry-After."""
 
     max_attempts: int = 6
     base_delay_s: float = 1.0
@@ -77,7 +77,7 @@ def call_with_retries(
             sleep(d)
         except BackendError:
             raise
-        except Exception as exc:  # noqa: BLE001 - normalise unexpected failures
+        except Exception as exc:  # noqa: BLE001 - normalize unexpected failures
             raise BackendError(f"{type(exc).__name__}: {exc}", backend=backend) from exc
     assert last is not None
     raise BackendError(

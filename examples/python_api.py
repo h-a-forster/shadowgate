@@ -25,7 +25,7 @@ tasks = arithmetic(300, seed=0)  # generated word problems with known answers
 
 # Simulated models know the tasks so they can answer "correctly" with a chosen skill.
 # For real models, swap in e.g.:
-#   from shadowgate.backends import AnthropicBackend   # pip install "shadowgate[anthropic]"
+#   from shadowgate.backends import AnthropicBackend   # pip install "shadowgate-llm[anthropic]"
 #   fast_model = AnthropicBackend("claude-haiku-5-5")  # key read from ANTHROPIC_API_KEY
 #   strong_model = AnthropicBackend("claude-opus-5-5")
 fast_model = SimulatedBackend(

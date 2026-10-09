@@ -56,7 +56,7 @@ def _empty_mismatch(name: str, candidate: str, target: str) -> Judgement | None:
     return None
 
 
-# --------------------------------------------------------------------------- text normalisation
+# --------------------------------------------------------------------------- text normalization
 
 _APOSTROPHES_RE = re.compile(r"['’ʼ`´]")
 _ABBREV_DOT_RE = re.compile(r"(?<=[^\W\d_])\.(?=[^\W\d_])")
@@ -65,7 +65,7 @@ _ARTICLES = frozenset({"a", "an", "the"})
 
 
 def normalize_text(s: str) -> str:
-    """Normalise free text for comparison.
+    """Normalize free text for comparison.
 
     Steps: strip answer markup (bold, backticks, ``\\boxed``), Unicode NFKC, casefold, unicode
     minus -> ``-``, drop thousands separators (``1,000`` -> ``1000``), delete apostrophes and
@@ -124,7 +124,7 @@ class Exact:
 
 
 class Normalized:
-    """Equal after :func:`normalize_text`. If both sides normalise to the empty string (e.g. both
+    """Equal after :func:`normalize_text`. If both sides normalize to the empty string (e.g. both
     are pure punctuation) the stripped raw strings are compared instead. Two empty answers are
     undecidable (None)."""
 
@@ -140,9 +140,9 @@ class Normalized:
 
 
 class Contains:
-    """The normalised target appears in the normalised candidate as a whole-word sequence
-    (``"4"`` is not contained in ``"42"``). A target that normalises to nothing is undecidable
-    (None), unless the candidate normalises to nothing too, in which case the stripped raw
+    """The normalized target appears in the normalized candidate as a whole-word sequence
+    (``"4"`` is not contained in ``"42"``). A target that normalizes to nothing is undecidable
+    (None), unless the candidate normalizes to nothing too, in which case the stripped raw
     strings are compared (as in :class:`Normalized`). Two empty answers are None."""
 
     name = "contains"
@@ -198,7 +198,7 @@ class RegexComparator:
 class ChoiceComparator:
     """Multiple-choice letters: both sides go through the ``choice`` extractor.
 
-    Target without a recognisable letter -> None. Candidate without one -> False (a non-empty
+    Target without a recognizable letter -> None. Candidate without one -> False (a non-empty
     answer that names no option does not match).
     """
 

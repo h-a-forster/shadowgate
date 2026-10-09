@@ -63,7 +63,7 @@ _SHIM_SAFE_PATH = re.compile(r"[A-Za-z0-9 _.:\\/~-]+")
 
 # Cost bases reported in the CLI's ``modelUsage`` that mean "priced from a known rate card".
 # The CLI reports "unknown" (and prints "[claude-code:unrecognized_model]" on stderr) when it
-# does not recognise the model and falls back to a default, often much higher, price.
+# does not recognize the model and falls back to a default, often much higher, price.
 _UNTRUSTED_COST_BASES = frozenset({"", "unknown"})
 _UNRECOGNIZED_MODEL_MARK = "unrecognized_model"
 
@@ -132,7 +132,7 @@ class ClaudeCodeBackend:
     2. shadowgate's ``PRICES`` table for the model the CLI reports in ``modelUsage`` (else the
        configured model);
     3. the CLI's ``total_cost_usd``, only when every ``modelUsage`` entry has a known
-       ``costBasis`` (not "unknown") and stderr has no unrecognised-model marker;
+       ``costBasis`` (not "unknown") and stderr has no unrecognized-model marker;
     4. otherwise None (unknown).
 
     Cache writes with the 1-hour TTL (``usage.cache_creation.ephemeral_1h_input_tokens``) are
@@ -345,7 +345,7 @@ class ClaudeCodeBackend:
         if isinstance(cost_raw, bool) or not isinstance(cost_raw, (int, float)):
             return None, "unknown"
         if _UNRECOGNIZED_MODEL_MARK in stderr:
-            log.debug("%s: CLI did not recognise the model; ignoring its cost", self.name)
+            log.debug("%s: CLI did not recognize the model; ignoring its cost", self.name)
             return None, "unknown"
         model_usage = data.get("modelUsage")
         bases: list[str] = []

@@ -10,12 +10,12 @@ Storage notes:
   :meth:`Ledger.record` call is its own transaction, so a crash loses at most the decision that
   was being written. Other processes can open the same file and read concurrently.
 * A single connection is shared by all threads of one :class:`Ledger` and guarded by a lock.
-* ``decision_json`` holds ``Decision.to_dict()`` serialised as strict JSON. Non-finite floats
+* ``decision_json`` holds ``Decision.to_dict()`` serialized as strict JSON. Non-finite floats
   (NaN, +/-inf) are not valid JSON; they are stored as the strings ``"NaN"``, ``"Infinity"`` and
   ``"-Infinity"``, which ``float()`` parses back, so numeric fields round-trip through
   ``Decision.from_dict``. The indexed ``cost_usd`` column stores NULL for a non-finite cost.
 * Run configs are stored with secret-looking keys (``api_key``, ``token``, ``secret``,
-  ``password`` ...) redacted recursively, as defence in depth: secrets are supposed to come from
+  ``password`` ...) redacted recursively, as defense in depth: secrets are supposed to come from
   environment variables and never appear in config values at all. Keys ending in ``_env`` name
   an environment variable rather than hold a secret and are kept.
 """
@@ -245,7 +245,7 @@ class Ledger:
         except sqlite3.Error as exc:
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
-            raise LedgerError(f"cannot initialise ledger {self.path}: {exc}") from exc
+            raise LedgerError(f"cannot initialize ledger {self.path}: {exc}") from exc
 
     def _migrate(self, from_version: int) -> None:
         """Upgrade an older schema in place. Caller holds the write transaction."""

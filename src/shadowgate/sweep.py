@@ -14,7 +14,7 @@ Semantics
   estimates if failures correlate with difficulty, so a note is added.
 * **Truth.** ``truth="reference"`` grades each tier's answer with ``Attempt.correct`` (vs the
   task's reference answer). ``truth="audit-tier"`` grades non-final tiers by
-  ``Attempt.agreement`` (agreement with the last tier) and counts the last tier as correct by
+  ``Attempt.agreement`` (agreement with the final tier) and counts the final tier as correct by
   definition, so "accuracy" then means *agreement with the reference (last) tier*, not
   correctness. ``truth="auto"`` picks "reference" when every usable decision has
   ``Attempt.correct`` on every tier, else "audit-tier".
@@ -697,7 +697,7 @@ def sweep(
     items, n_undecided = _items(usable, resolved)
     if resolved == "audit-tier":
         notes.append(
-            f"no ground truth on every tier: accuracy is agreement with the reference tier "
+            f"no ground truth on every tier: accuracy is agreement with the final tier "
             f"{tiers[-1]!r}, which counts as correct by definition"
         )
     if n_undecided:

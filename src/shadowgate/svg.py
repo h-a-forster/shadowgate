@@ -2,7 +2,7 @@
 
 Pure string building with deterministic output. Charts are standalone SVG documents that scale
 to their container (``width="100%"`` plus a ``viewBox``), carry ``role="img"``, a ``<title>`` and
-an ``aria-label``, and take their colours from CSS custom properties (with hex fallbacks) so the
+an ``aria-label``, and take their colors from CSS custom properties (with hex fallbacks) so the
 embedding page controls light and dark themes. Text and axes use ``currentColor``.
 
 Public API:
@@ -57,7 +57,7 @@ PALETTE: tuple[str, ...] = (
     "#CC79A7",  # reddish purple
     "#E69F00",  # orange
     "#56B4E9",  # sky blue
-    "#6B7280",  # grey
+    "#6B7280",  # gray
     "#8C6D31",  # brown
 )
 _PALETTE_DARK: tuple[str, ...] = (
@@ -123,7 +123,7 @@ class Series:
     ``kind`` None means the chart default (``line`` for :func:`line_chart`/:func:`xy_chart`,
     ``scatter`` for :func:`scatter`). ``style`` is a palette index (1-8), a role name
     (``"muted"``, ``"accent"``, ``"baseline"``, ``"ref"``), ``"series-N"``, or None for the next
-    palette colour. Points with None/NaN/inf coordinates are skipped (and break lines).
+    palette color. Points with None/NaN/inf coordinates are skipped (and break lines).
     """
 
     name: str
@@ -141,7 +141,7 @@ class Series:
 
 @dataclass(frozen=True)
 class Marker:
-    """A single labelled point drawn with a distinct shape (baselines, recommended point)."""
+    """A single labeled point drawn with a distinct shape (baselines, recommended point)."""
 
     x: float | None
     y: float | None
@@ -166,7 +166,7 @@ class ErrorBar:
 
 @dataclass(frozen=True)
 class RefLine:
-    """A labelled horizontal (``axis="y"``) or vertical (``axis="x"``) reference line."""
+    """A labeled horizontal (``axis="y"``) or vertical (``axis="x"``) reference line."""
 
     axis: Literal["x", "y"]
     value: float
@@ -392,7 +392,7 @@ def _color_key(style: Style, auto: int) -> str:
 
 
 def _paint(fill: str | None = None, stroke: str | None = None) -> str:
-    """Attributes for colour keys: hex fallback attribute plus a CSS ``var()`` override."""
+    """Attributes for color keys: hex fallback attribute plus a CSS ``var()`` override."""
     attrs: list[str] = []
     styles: list[str] = []
     for prop, key in (("fill", fill), ("stroke", stroke)):
@@ -752,14 +752,14 @@ def xy_chart(
     desc: str | None = None,
     empty_message: str = "No data",
 ) -> str:
-    """Render lines, step lines, scatter points, labelled markers, error bars and reference lines
+    """Render lines, step lines, scatter points, labeled markers, error bars and reference lines
     on shared numeric axes. Returns a standalone ``<svg>`` string."""
     width, height = _check_dims(width, height)
     series_list = [series] if isinstance(series, Series) else list(series)
     if isinstance(diagonal, bool):
         diagonal = Diagonal() if diagonal else None
 
-    # ---- normalise data
+    # ---- normalize data
     prepared: list[tuple[Series, SeriesKind, str, list[list[tuple[float, float]]]]] = []
     auto = 0
     for s in series_list:
@@ -1196,7 +1196,7 @@ def _draw_markers(
             )
         paint = _paint(fill=key)
         if m.shape != "x":
-            # filled shapes get a thin background-coloured outline to separate them from lines
+            # filled shapes get a thin background-colored outline to separate them from lines
             hx = _FALLBACK[key]
             paint = (
                 f'fill="{hx}" stroke="#FFFFFF" stroke-width="1.5"'
@@ -1395,7 +1395,7 @@ def bar_with_ci(
                 (px1 - 4, yy + 13, "end"),
                 (px0 + 4, yy + 13, "start"),
             ]
-            for i in range(n - 1, -1, -1):  # band centres, right to left
+            for i in range(n - 1, -1, -1):  # band centers, right to left
                 cx = px0 + band * (i + 0.5)
                 opts += [(cx, yy - 5, "middle"), (cx, yy + 13, "middle")]
             cands = [

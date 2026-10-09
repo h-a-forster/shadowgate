@@ -4,7 +4,7 @@ A config file has five sections::
 
     [run]                 run settings (name, workers, budget, cache, ledger, seed)
     [backends.<id>]       model backends, referenced by id from tiers, monitors and judges
-    [[tiers]]             cascade tiers, cheapest first; the last tier always serves
+    [[tiers]]             cascade tiers, cheapest first; the final tier always serves
     [answer]              answer extractor and comparator (grading + agreement)
     [audit]               shadow-audit policy, tolerance and audit judge
 
@@ -619,7 +619,7 @@ def _validate(
         if tier_name != final_name:
             raise ConfigError(
                 f"audit.tier: must be the final tier {_q(final_name)}, got {_q(tier_name)} "
-                "(a non-final audit tier would audit accepted cases by themselves or a weaker tier)"
+                "(a non-final audit tier would audit skipped cases by themselves or a weaker tier)"
             )
     if "seed" in audit:
         _int(audit["seed"], "audit.seed")

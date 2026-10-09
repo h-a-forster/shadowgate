@@ -1,12 +1,12 @@
-"""Confidence-gated model cascade with shadow audits of the cases it keeps.
+"""Confidence-gated LLM cascade with shadow audits of the skipped cases.
 
 A :class:`Cascade` walks its tiers in order. Each non-final tier answers, its confidence
 estimator scores the answer, and the answer is served when the score clears the tier's
 threshold; otherwise the task escalates. The final tier always serves what it produces.
 
-Accepted answers from non-final tiers ("skipped cases") are sampled for a shadow audit under an
-:class:`AuditPolicy`: the audit (reference) tier, which is always the final tier, re-answers the
-task and a judge compares the two answers. Every accepted case records its inclusion probability
+Answers served by non-final tiers ("skipped cases") are sampled for a shadow audit under an
+:class:`AuditPolicy`: the audit tier, which is always the final tier, re-answers the
+task and a judge compares the two answers. Every skipped case records its inclusion probability
 so downstream estimates can weight by ``1 / inclusion_prob`` and stay unbiased.
 
 Notes on configuration:
@@ -19,7 +19,7 @@ Notes on configuration:
 * The final tier's ``threshold`` and ``estimator`` are ignored: whatever it answers is served.
 * ``audit=None`` disables shadow audits entirely (no inclusion probabilities are recorded).
 * ``AuditPolicy.audit_tier`` may only name the final tier (or be None, meaning the final tier):
-  every non-final tier can accept, so any other audit tier would audit some accepted cases with
+  every non-final tier can accept, so any other audit tier would audit some skipped cases with
   themselves or a weaker tier and the audit would be meaningless.
 * A non-final tier never accepts a completion whose ``stop_reason`` is "refusal", "error" or
   "max_tokens", or whose extracted answer is empty: the estimator is not run, the attempt
@@ -181,13 +181,13 @@ class Tier:
 
 @dataclass(frozen=True)
 class AuditPolicy:
-    """How accepted (skipped) cases are sampled for shadow audits.
+    """How skipped cases are sampled for shadow audits.
 
     ``strata`` are ``(lo, hi, rate)`` bands on the served confidence; the first band with
     ``lo <= conf < hi`` wins; a band whose ``hi`` is the largest ``hi`` (or >= 1) also includes
     ``conf == hi``, regardless of listing order. Unmatched or missing
     confidence uses ``rate``. The result is never below ``floor`` (> 0), which keeps every
-    accepted case auditable and inverse-probability estimates unbiased.
+    skipped case auditable and inverse-probability estimates unbiased.
     """
 
     rate: float = 0.1
@@ -278,7 +278,7 @@ class Cascade:
             if audit.audit_tier != tiers[-1].name:
                 raise ConfigError(
                     f"audit tier {audit.audit_tier!r} must be the final tier {tiers[-1].name!r}: "
-                    "a non-final audit tier would audit accepted cases with themselves or a "
+                    "a non-final audit tier would audit skipped cases with themselves or a "
                     "weaker tier"
                 )
 
@@ -365,7 +365,7 @@ class Cascade:
         else:
             served = stop
 
-        # Eval mode: agreement of every non-final attempt with the last tier's answer.
+        # Eval mode: agreement of every non-final attempt with the final tier's answer.
         if is_eval and attempts[-1].error is None:
             ref = attempts[-1].answer
             judge = self._agreement_judge() if last > 0 else None

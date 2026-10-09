@@ -61,8 +61,8 @@ Each pluggable family is built by a factory function `from_spec(spec, **deps)` t
 3. Add tests covering construction from a spec, rejection of unknown keys, normal behavior, and
    failure/unknown cases (for example returning `None` rather than guessing). Backends that talk
    to a service need offline tests (stub the transport) plus optional `live` tests.
-4. Document the new `type` and its options in `docs/design.md` or `README.md`, and add a
-   `CHANGELOG.md` entry.
+4. Document the new `type` and its options in [docs/configuration.md](docs/configuration.md), and
+   add a `CHANGELOG.md` entry.
 
 ## Commits and pull requests
 
@@ -74,5 +74,18 @@ Each pluggable family is built by a factory function `from_spec(spec, **deps)` t
   behavior or configuration changes.
 - CI runs lint, the test matrix (Linux, Windows, macOS; Python 3.11 to 3.13) and a build smoke
   test; all must pass before merge.
+
+## Releasing
+
+One-time setup, done by a maintainer before the first release:
+
+- GitHub Pages: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+- PyPI: add a trusted publisher (a pending publisher until the project exists) for the project
+  `shadowgate-llm`, this repository, workflow `release.yml` and environment `pypi`.
+- GitHub: create an environment named `pypi` (Settings -> Environments).
+
+To release, set `__version__` in `src/shadowgate/__init__.py`, move the "Unreleased" entries in
+`CHANGELOG.md` under the new version, then push a matching tag (`v0.1.0`). The release workflow
+runs the checks, builds, publishes to PyPI and creates the GitHub release.
 
 By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

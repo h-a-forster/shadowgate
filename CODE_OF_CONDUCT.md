@@ -6,9 +6,8 @@ project space, including issues, pull requests, discussions and reviews.
 
 ## Reporting
 
-To report unacceptable behavior, contact the maintainers privately. Use GitHub's private
-vulnerability reporting (the repository's **Security** tab, **Report a vulnerability**) for
-anything that should not be public, or open an issue asking a maintainer to get in touch if the
-matter can be raised in public. All reports will be reviewed promptly and handled confidentially.
+To report unacceptable behavior, contact the maintainers privately through the email on their
+GitHub profile. Do not use public issues for conduct reports, and do not use the security
+vulnerability channel. All reports are reviewed promptly and handled confidentially.
 
 Enforcement follows the community impact guidelines in the Contributor Covenant.

@@ -12,7 +12,7 @@
 6. footer (version, UTC timestamp, run id, mode).
 
 :func:`render_text` is a compact plain-text summary for terminals (at most 100 columns, no
-colour codes). :func:`write_report` picks the format from the file suffix.
+color codes). :func:`write_report` picks the format from the file suffix.
 
 All model- and dataset-derived strings are escaped for the output format. The HTML report is a
 single file with inline CSS and inline SVG only: no scripts, fonts or other external requests.
@@ -94,7 +94,7 @@ _STATUS_LABEL = {
 
 METHODOLOGY = (
     "Disagreement is the share of skipped cases (answered by a non-final tier without "
-    "escalating) whose answer differs from the reference tier's answer to the same task, as "
+    "escalating) whose answer differs from the final (audit) tier's answer to the same task, as "
     "decided by the configured comparator or judge. In serve mode only a random sample of skipped "
     "cases is shadow-audited; each audited case is weighted by 1/π, the inverse of its known "
     "inclusion probability (a Hajek inverse-probability-weighted estimator), so the estimate "
@@ -113,7 +113,7 @@ METHODOLOGY = (
     "fixed-sample interval: checking it repeatedly as audits accumulate and stopping at the "
     "first ok inflates the chance of a false ok, so fix the number of audits in advance or use a "
     "stricter confidence level for repeated checks. The savings interval reflects only the "
-    "uncertainty in the cost of always using the reference tier. Sweep accuracies are Wilson "
+    "uncertainty in the cost of always using the final tier. Sweep accuracies are Wilson "
     "intervals; recommended thresholds are chosen on a selection split and re-evaluated on a "
     "held-out split."
 )
@@ -257,7 +257,7 @@ class _Table:
     headers: list[str]
     rows: list[list[str]]
     numeric: set[int] = field(default_factory=set)  # right-aligned column indices
-    highlight: set[int] = field(default_factory=set)  # emphasised row indices
+    highlight: set[int] = field(default_factory=set)  # emphasized row indices
     note: str = ""
 
 
@@ -334,7 +334,7 @@ def _non_final(summary: AuditSummary) -> list[str]:
 
 
 def _ref_name(summary: AuditSummary) -> str:
-    return summary.reference_tier or summary.final_tier or "the reference tier"
+    return summary.reference_tier or summary.final_tier or "the final tier"
 
 
 def _metric_name(summary: AuditSummary) -> str:
@@ -398,8 +398,8 @@ def _headline_segments(summary: AuditSummary) -> list[Segment]:
     if len(s.tiers) <= 1 and s.final_tier is not None:
         return [
             (
-                f"Single-tier run: every task was served by {s.final_tier}; nothing was kept "
-                "early, so there is nothing to audit.",
+                f"Single-tier run: every task was served by {s.final_tier}; no case was skipped, "
+                "so there is nothing to audit.",
                 False,
             )
         ]
@@ -433,7 +433,7 @@ def _headline_segments(summary: AuditSummary) -> list[Segment]:
         segs.append((f" ({lvl} {fmt_ci(d.lo, d.hi)}, {', '.join(extra)}).", False))
     e = s.skipped_error
     if e is not None and _finite(e.value) is not None:
-        lead = " Against reference answers, the kept answers are wrong on "
+        lead = " Against reference answers, the skipped cases are wrong on "
         segs.append((lead, False))
         segs.append((fmt_pct(e.value), True))
         segs.append(
@@ -442,7 +442,7 @@ def _headline_segments(summary: AuditSummary) -> list[Segment]:
     if (d is None or _finite(d.value) is None) and (e is None or _finite(e.value) is None):
         segs.append(
             (
-                " No completed audits yet, so how often those kept answers are wrong cannot "
+                " No completed audits yet, so how often those skipped cases are wrong cannot "
                 "be estimated.",
                 False,
             )
@@ -457,7 +457,8 @@ def _headline_segments(summary: AuditSummary) -> list[Segment]:
         segs.append(
             (
                 f" That is about {_fmt_num(w[0], w[2])} {what} among the "
-                f"{fmt_count(s.n_skipped)} kept ({_fmt_num(w[1], w[2])}{_NDASH}{_fmt_num(w[2])}).",
+                f"{fmt_count(s.n_skipped)} skipped cases "
+                f"({_fmt_num(w[1], w[2])}{_NDASH}{_fmt_num(w[2])}).",
                 False,
             )
         )
@@ -476,7 +477,7 @@ def _cards(summary: AuditSummary) -> list[tuple[str, str, str]]:
     share = s.n_skipped / s.n_decisions if s.n_decisions else None
     cards.append(
         (
-            "Kept by fast tier",
+            "Answered by fast tier",
             fmt_pct(share),
             f"{fmt_count(s.n_skipped)} of {fmt_count(s.n_decisions)} tasks",
         )
@@ -514,9 +515,9 @@ def _cards(summary: AuditSummary) -> list[tuple[str, str, str]]:
     w = s.expected_wrong_skipped
     if w is not None and all(_finite(v) is not None for v in w):
         label = (
-            "Expected wrong-but-kept"
+            "Expected wrong skipped cases"
             if s.expected_wrong_source == "skipped_error"
-            else "Expected disagreeing-but-kept"
+            else "Expected disagreeing skipped cases"
         )
         cards.append(
             (
@@ -545,7 +546,7 @@ def _bins_all(summary: AuditSummary) -> list[BinSummary]:
 def _bins_table(summary: AuditSummary) -> _Table:
     bins = _bins_all(summary)
     has_err = any(b.error is not None for b in bins)
-    headers = ["Confidence bin", "Accepted", "Audited", "Disagreement (CI)"]
+    headers = ["Confidence bin", "Skipped", "Audited", "Disagreement (CI)"]
     if has_err:
         headers.append("Error vs references (CI)")
     rows = []
@@ -667,7 +668,7 @@ def _tier_table(summary: AuditSummary) -> _Table:
 def _coverage_table(summary: AuditSummary) -> _Table:
     s = summary
     rows = [
-        ["Skipped (kept early)", fmt_count(s.n_skipped)],
+        ["Skipped", fmt_count(s.n_skipped)],
         ["Audited", fmt_count(s.n_audited)],
         ["Not selected for audit", fmt_count(s.n_not_selected)],
         ["Audit pending", fmt_count(s.n_pending)],
@@ -814,7 +815,7 @@ def _pareto_chart(sweep: SweepResult, *, narrow: bool = False) -> str:
         width=360 if narrow else 720,
         height=440 if narrow else 420,
         legend="bottom" if narrow else "auto",
-        desc=f"{len(known)} simulated threshold settings (grey), the Pareto frontier (line), "
+        desc=f"{len(known)} simulated threshold settings (gray), the Pareto frontier (line), "
         "single-tier and oracle baselines, and the recommended point (star).",
         empty_message="No operating points with a known cost",
     )
@@ -1017,8 +1018,8 @@ def _calibration_charts(sweep: SweepResult, tolerance: float | None) -> list[tup
         risk_chart = line_chart(
             [Series("risk", rc, kind="step", style=1, in_legend=False)],
             title=f"Risk-coverage: {name}",
-            x_label="coverage (share kept)",
-            y_label="risk (error among kept)",
+            x_label="coverage (share answered by tier)",
+            y_label="risk (error among skipped)",
             x_range=(0.0, 1.0),
             x_format="percent",
             y_format="percent",
@@ -1026,8 +1027,8 @@ def _calibration_charts(sweep: SweepResult, tolerance: float | None) -> list[tup
             legend="none",
             width=440,
             height=360,
-            desc="Error rate among the kept answers as the threshold is lowered and more "
-            "answers are kept.",
+            desc="Error rate among the skipped cases as the threshold is lowered and the tier "
+            "answers more cases alone.",
             empty_message="No scored decisions",
         )
         out.append((risk_chart, f"Risk-coverage curve for {name}."))
@@ -1110,7 +1111,7 @@ def _sections(
             + (
                 "against reference answers."
                 if sweep.truth == "reference"
-                else f"as agreement with the last tier ({sweep.tiers[-1] if sweep.tiers else '?'})"
+                else f"as agreement with the final tier ({sweep.tiers[-1] if sweep.tiers else '?'})"
                 ", which counts as correct by definition."
             )
         )
@@ -1121,7 +1122,7 @@ def _sections(
                     [
                         (
                             _responsive(_pareto_chart(sweep), _pareto_chart(sweep, narrow=True)),
-                            "Grey: every simulated threshold setting. Line: "
+                            "Gray: every simulated threshold setting. Line: "
                             "Pareto frontier. Star: recommended thresholds.",
                         )
                     ],
@@ -1412,7 +1413,7 @@ _MD_SPECIAL = str.maketrans({c: "\\" + c for c in "\\`*_[]|#"})
 
 
 def _md(s: object) -> str:
-    """Escape for Markdown text and table cells (raw HTML is neutralised as entities)."""
+    """Escape for Markdown text and table cells (raw HTML is neutralized as entities)."""
     raw = str(s)
     text = " ".join(raw.split())
     if text:
@@ -1550,7 +1551,7 @@ def _num3(x: float | None) -> str:
 def render_text(summary: AuditSummary, sweep: SweepResult | None = None) -> str:
     """Compact plain-text summary for terminals.
 
-    Lines are at most 100 columns, there are no colour codes, and the report's own symbols are
+    Lines are at most 100 columns, there are no color codes, and the report's own symbols are
     ASCII (dashes, ">=", "|") so legacy console encodings can print it.
     """
     s = summary
@@ -1572,13 +1573,13 @@ def render_text(summary: AuditSummary, sweep: SweepResult | None = None) -> str:
         lines.append("")
         lines.append("By confidence bin:")
         has_err = any(b.error is not None for b in bins)
-        hdr = f"  {'bin':<14} {'kept':>6} {'audited':>8}  {'disagreement (CI)':<26}"
+        hdr = f"  {'bin':<14} {'skipped':>7} {'audited':>8}  {'disagreement (CI)':<26}"
         if has_err:
             hdr += f"  {'error vs refs (CI)':<26}"
         lines.append(hdr)
         for b in bins:
             row = (
-                f"  {_clean_text(b.label)[:14]:<14} {b.n_accepted:>6} {b.n_audited:>8}  "
+                f"  {_clean_text(b.label)[:14]:<14} {b.n_accepted:>7} {b.n_audited:>8}  "
                 f"{_est_cell(b.disagreement if b.n_audited else None):<26}"
             )
             if has_err:
@@ -1587,7 +1588,7 @@ def render_text(summary: AuditSummary, sweep: SweepResult | None = None) -> str:
     if sweep is not None:
         lines.append("")
         acc = _acc_label(sweep)
-        truth = "references" if sweep.truth == "reference" else "the last tier"
+        truth = "references" if sweep.truth == "reference" else "the final tier"
         lines += _wrap(
             f"Sweep: {fmt_count(sweep.n)} tasks, {fmt_count(len(sweep.points))} threshold "
             f"settings, {fmt_count(len(sweep.frontier))} on the Pareto frontier; {acc} vs "

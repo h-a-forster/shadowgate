@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The distribution is published on PyPI as `shadowgate-llm` (the name `shadowgate` is taken).
+  The import name and the CLI command stay `shadowgate`.
+
 ## [0.1.0] - 2026-10-09
 
 Initial release.
@@ -19,7 +24,7 @@ Initial release.
 - Confidence estimators: `verbal`, `logprob`, `self_consistency`, `monitor`, `combine`,
   `calibrated`, and `callable` (Python API only).
 - Answer extractors and comparators, including a model `judge` comparator.
-- Shadow audit of kept cases: reproducible sampling with known inclusion probabilities
+- Shadow audit of skipped cases: reproducible sampling with known inclusion probabilities
   (base rate, confidence strata, floor), inline or deferred, with a Hájek estimate of
   disagreement weighted by 1/π, error rates against references, and a tolerance status.
 - Eval mode (every tier on every task), threshold sweep with an accuracy/cost Pareto frontier,
@@ -38,5 +43,5 @@ Initial release.
 - Results of a Claude Haiku 5.5 -> Opus 5.5 run on multi-step arithmetic, with committed decisions.
 - Stdlib-only runtime; Python 3.11+.
 
-[Unreleased]: ../../compare/v0.1.0...HEAD
-[0.1.0]: ../../releases/tag/v0.1.0
+[Unreleased]: https://github.com/h-a-forster/shadowgate/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/h-a-forster/shadowgate/releases/tag/v0.1.0

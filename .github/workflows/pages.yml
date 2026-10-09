@@ -10,8 +10,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -88,7 +86,7 @@ jobs:
           <body>
           <main>
           <h1>shadowgate</h1>
-          <p>Confidence-gated model cascades that audit the cases they skip. Built with <code>$version</code>.</p>
+          <p>Confidence-gated LLM cascades that measure how often the cheap tier is wrong on the cases it answers alone: shadow audits with confidence intervals, threshold sweeps, accuracy/cost Pareto curves. Built with <code>$version</code>.</p>
           <h2>Demo</h2>
           <ul>
           <li><a href="demo/report.html">Demo report (HTML)</a>: 400 simulated tasks, offline, from <code>shadowgate demo</code></li>
@@ -110,6 +108,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

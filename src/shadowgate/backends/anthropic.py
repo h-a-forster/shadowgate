@@ -20,7 +20,7 @@ from .openai_compat import parse_retry_after
 
 __all__ = ["AnthropicBackend", "INSTALL_HINT"]
 
-INSTALL_HINT = 'pip install "shadowgate[anthropic]"'
+INSTALL_HINT = 'pip install "shadowgate-llm[anthropic]"'
 _DEFAULT_KEY_ENV = "ANTHROPIC_API_KEY"
 _MAX_ERROR_CHARS = 500
 
@@ -33,7 +33,7 @@ _STOP = {
 
 # SDK exception class names that signal a transient transport failure (no HTTP status).
 # APITimeoutError subclasses APIConnectionError in the SDK; both names are listed so that
-# duck-typed stand-ins are recognised as well.
+# duck-typed stand-ins are recognized as well.
 _TRANSIENT_NAMES = frozenset({"APIConnectionError", "APITimeoutError"})
 
 

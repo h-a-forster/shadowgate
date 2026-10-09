@@ -364,7 +364,7 @@ class Choice:
     3. A line that is only a letter (``C``, ``(C)``, ``C)``, ``c.``), or exactly one line that
        looks like a chosen option (``C) Paris``); several such lines are an option listing
        and are ignored.
-    4. The last ``(C)`` in prose, unless the parenthesised letters run in increasing order
+    4. The last ``(C)`` in prose, unless the parenthesized letters run in increasing order
        (three or more), which looks like a restated option list.
     5. The last standalone capital letter. ``A`` and ``I`` count only before punctuation /
        end of line (``A`` also before ``is``/``was``/``seems``...), so ``A man ...`` and

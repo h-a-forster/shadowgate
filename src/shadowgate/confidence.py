@@ -544,7 +544,7 @@ class Combine:
     """Combine member estimators with ``mean`` / ``min`` / ``max`` / ``weighted``.
 
     Any member None -> combined None, unless ``ignore_missing=True`` in which case missing
-    members are dropped (weights renormalised over the rest); all missing -> None.
+    members are dropped (weights renormalized over the rest); all missing -> None.
 
     A member that raises counts as a missing score (its error is in that member's
     ``detail["members"][i]["error"]``); calls made by the other members are kept.

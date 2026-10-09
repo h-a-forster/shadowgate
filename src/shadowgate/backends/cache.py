@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS completions (
 class CacheStore:
     """Thread-safe SQLite key/value store for completions (WAL mode).
 
-    One connection shared across threads, serialised by a lock. ``path`` may be ``":memory:"``.
+    One connection shared across threads, serialized by a lock. ``path`` may be ``":memory:"``.
     Parent directories are created. Stored completions are returned with ``cached=True``.
     """
 

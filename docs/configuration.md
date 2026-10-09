@@ -7,7 +7,7 @@ error.
 |---|---|---|
 | [`[run]`](#run) | no | run name, concurrency, spending cap, cache, ledger path, seed |
 | [`[backends.<id>]`](#backends) | yes (at least the ones tiers use) | model backends, referenced by id |
-| [`[[tiers]]`](#tiers) | yes, at least one | cascade tiers, cheapest first; the last tier always serves |
+| [`[[tiers]]`](#tiers) | yes, at least one | cascade tiers, cheapest first; the final tier always serves |
 | [`[answer]`](#answer) | no | answer extractor and comparator |
 | [`[audit]`](#audit) | no | shadow-audit sampling, tolerance and audit judge |
 
@@ -69,7 +69,7 @@ Keys shared by several types:
 
 ### `type = "anthropic"`
 
-Official Anthropic SDK. Install with `pip install "shadowgate[anthropic]"`.
+Official Anthropic SDK. Install with `pip install "shadowgate-llm[anthropic]"`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -185,7 +185,7 @@ pricing = { input = 0.10, output = 0.50 }
 ## `[[tiers]]`
 
 Tiers are listed cheapest first. Every tier except the last needs `threshold` and `confidence`;
-the last tier must have neither, because it always serves.
+the final tier must have neither, because it always serves.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -270,7 +270,7 @@ An empty candidate never matches a non-empty target. Two empty answers are undec
 
 ## `[audit]`
 
-Controls shadow audits of accepted (skipped) cases in serve mode. If the section is absent,
+Controls shadow audits of skipped cases in serve mode. If the section is absent,
 audits run inline at the defaults below.
 
 | Key | Type | Default | Meaning |
@@ -278,8 +278,8 @@ audits run inline at the defaults below.
 | `mode` | string | `"inline"` | `inline`: audit during the run. `deferred`: record selected cases as pending; run them with `shadowgate audit --run-pending -c CONFIG`. `off`: no audits and no inclusion probabilities. |
 | `rate` | number in (0, 1] | `0.1` | Inclusion probability for confidences outside every stratum. |
 | `strata` | array of `[lo, hi, rate]` | `[]` | Bands on the served confidence with their own inclusion probability. First match on `lo <= conf < hi` wins; the band with the largest `hi` (or any `hi >= 1`) also includes `conf == hi`. `lo < hi`, both in [0, 1]; `rate` in (0, 1]. |
-| `floor` | number in (0, 1] | `0.01` | Minimum inclusion probability. Must be positive so every accepted case can be audited and the weighted estimate stays unbiased. |
-| `tier` | string | the last tier | Audit (reference) tier. Only the last tier's name is accepted. |
+| `floor` | number in (0, 1] | `0.01` | Minimum inclusion probability. Must be positive so every skipped case can be audited and the weighted estimate stays unbiased. |
+| `tier` | string | the final tier | Audit tier. Only the final tier's name is accepted. |
 | `seed` | integer | `run.seed` | Seed for the reproducible, sha256-based selection of audited cases. |
 | `tolerance` | number in (0, 1) | unset | Acceptable skipped-case error or disagreement rate. Sets the audit status and the default for `audit`, `report` and `--fail-on-breach`. Stored with the run, so it survives `export` and `import`. |
 | `judge` | table or string | `[answer].comparator` | Comparator for served answer vs audit answer. Use a `judge` comparator for free-text answers. |

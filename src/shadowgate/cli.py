@@ -113,7 +113,7 @@ comparator = { type = "numeric" }   # 1,000 == 1000.0
 
 [audit]
 mode = "inline"
-rate = 0.2               # audit 20% of accepted cases outside the strata below
+rate = 0.2               # audit 20% of skipped cases outside the strata below
 floor = 0.05
 # [lo, hi, rate] on the fast tier's confidence: audit borderline acceptances more often.
 strata = [[0.55, 0.9, 0.6], [0.9, 1.0, 0.3]]
@@ -134,7 +134,7 @@ STARTER_CONFIG = """\
 # To use real models, replace the two [backends.*] tables, for example:
 #
 #   [backends.fast]
-#   type = "anthropic"                 # pip install "shadowgate[anthropic]"
+#   type = "anthropic"                 # pip install "shadowgate-llm[anthropic]"
 #   model = "claude-haiku-5-5"
 #   api_key_env = "ANTHROPIC_API_KEY"  # keys are read from the environment, never from here
 #
@@ -182,7 +182,7 @@ comparator = { type = "numeric" }
 
 [audit]
 mode = "inline"          # "deferred" records audits as pending for `shadowgate audit --run-pending`
-rate = 0.2               # share of accepted (skipped) cases re-answered by the final tier
+rate = 0.2               # share of skipped cases re-answered by the final tier
 floor = 0.05
 tolerance = 0.05         # acceptable disagreement rate on skipped cases
 """
@@ -477,6 +477,8 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     if args.n < 1:
         raise UsageError("--n must be >= 1")
     out = Path(args.out)
+    if out.exists() and not out.is_dir():
+        raise UsageError(f"--out {args.out} exists and is not a directory")
     out.mkdir(parents=True, exist_ok=True)
     tasks = arithmetic(args.n, seed=args.seed)
     save_tasks(tasks, out / "tasks.jsonl")
@@ -492,7 +494,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     _out(
         f"shadowgate demo: {len(tasks)} simulated arithmetic tasks (seed {args.seed}); "
         f"fast tier skill {backends['fast']['skill']:g} (overconfident), "
-        f"slow tier skill {backends['slow']['skill']:g}"
+        f"final tier skill {backends['slow']['skill']:g}"
     )
     ledger_path = out / "ledger.sqlite"
     base = f"demo-n{args.n}-s{args.seed}"
@@ -543,7 +545,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
 
 def _demo_conclusion(summary: AuditSummary, decisions: Sequence[Decision], tier: str) -> str:
-    """One plain sentence: reported confidence on kept answers vs the audited disagreement."""
+    """One plain sentence: reported confidence on skipped cases vs the audited disagreement."""
     kept = [
         float(d.attempts[0].confidence.score)
         for d in decisions
@@ -556,7 +558,7 @@ def _demo_conclusion(summary: AuditSummary, decisions: Sequence[Decision], tier:
     ref = summary.reference_tier or "the final tier"
     dis = summary.disagreement
     if not kept or dis is None or dis.value is None:
-        return f"The {tier} tier kept no audited answers, so there is nothing to compare yet."
+        return f"The {tier} tier has no audited skipped cases, so there is nothing to compare yet."
     conf = sum(kept) / len(kept)
     ci = ""
     if dis.lo is not None and dis.hi is not None:
@@ -581,12 +583,12 @@ def _print_demo_summary(summary: AuditSummary, sw: SweepResult, threshold: float
     _out(f"Serve mode: confidence threshold {threshold:.2f}, stratified shadow audits")
     _out(f"  escalation rate         {_est(summary.escalation_rate)}")
     _out(
-        f"  kept by fast tier       {summary.n_skipped} decisions, "
+        f"  answered by fast tier   {summary.n_skipped} decisions, "
         f"{summary.n_audited} shadow-audited by {ref!r}"
     )
-    _out(f"  disagreement on kept    {_est(summary.disagreement)} (weighted by 1/pi)")
+    _out(f"  disagreement on skipped {_est(summary.disagreement)} (weighted by 1/pi)")
     if summary.skipped_error is not None:
-        _out(f"  error on kept           {_est(summary.skipped_error)} (vs references)")
+        _out(f"  error on skipped        {_est(summary.skipped_error)} (vs references)")
     if summary.served_accuracy is not None:
         _out(f"  served accuracy         {_est(summary.served_accuracy)}")
     _out(f"  cost per task           {_usd(summary.cost_per_task)}")
@@ -1036,7 +1038,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
         )
         raise UsageError(
             f"run {run_id} ({mode} mode) has {len(scores)} scored attempts of tier {tier!r} "
-            f"labelled by {what} (need >= {_MIN_CALIBRATION_PAIRS}); {hint}"
+            f"labeled by {what} (need >= {_MIN_CALIBRATION_PAIRS}); {hint}"
         )
     notes: list[str] = []
     if mode == "serve" and truth == "audit-tier":
@@ -1135,6 +1137,12 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
 def _cmd_report(args: argparse.Namespace) -> int:
     from .errors import InsufficientData
 
+    suffix = Path(args.output).suffix.lower()
+    if suffix not in (".html", ".htm", ".md", ".markdown", ".txt"):
+        raise UsageError(
+            f"cannot tell the report format from {args.output!r}: the output file must end in "
+            ".html or .md (also accepted: .htm, .markdown, .txt)"
+        )
     ledger_path = Path(args.ledger) if args.ledger else DEFAULT_LEDGER
     with _open_ledger(ledger_path) as ledger:
         run_id = _resolve_run(ledger, args.run_id)
@@ -1299,9 +1307,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="shadowgate",
         formatter_class=_Formatter,
         description=(
-            "Confidence-gated model cascades that audit the cases they skip.\n"
+            "Confidence-gated LLM cascades that measure how often the cheap tier is wrong on the\n"
+            "cases it answers alone.\n"
             "A cheap tier answers first; a confidence estimator decides whether to escalate;\n"
-            "shadow audits estimate how often the kept answers are wrong."
+            "shadow audits re-answer a sample of the skipped cases with the final tier."
         ),
         epilog=(
             "examples:\n"
@@ -1361,7 +1370,9 @@ def build_parser() -> argparse.ArgumentParser:
         "examples:\n  shadowgate demo\n  shadowgate demo --n 1000 --seed 3 --out demo --open",
         _cmd_demo,
     )
-    p.add_argument("--out", metavar="DIR", default="shadowgate-demo", help="output directory")
+    p.add_argument(
+        "--out", metavar="DIR", default="shadowgate-demo", help="output directory (shadowgate-demo)"
+    )
     p.add_argument("--n", type=int, default=400, metavar="N", help="number of tasks (400)")
     p.add_argument("--seed", type=int, default=0, metavar="S", help="dataset and model seed (0)")
     p.add_argument("--open", action="store_true", help="open the HTML report in a browser")
@@ -1398,7 +1409,7 @@ def build_parser() -> argparse.ArgumentParser:
     # audit
     p = add(
         "audit",
-        "summarise the shadow audit of a run: how often are kept (skipped) answers wrong?",
+        "summarize the shadow audit of a run: how often are skipped cases wrong?",
         "examples:\n"
         "  shadowgate audit\n"
         "  shadowgate audit --run-id nightly --tolerance 0.02 --fail-on-breach\n"
@@ -1445,9 +1456,27 @@ def build_parser() -> argparse.ArgumentParser:
         default="max-savings",
         help="selection objective (max-savings)",
     )
-    p.add_argument("--max-drop", type=float, default=0.01, metavar="X", help="(0.01)")
-    p.add_argument("--min-accuracy", type=float, default=None, metavar="X")
-    p.add_argument("--budget", type=float, default=None, metavar="X", help="USD per task")
+    p.add_argument(
+        "--max-drop",
+        type=float,
+        default=0.01,
+        metavar="X",
+        help="max-savings: allowed accuracy drop below the best single tier (0.01)",
+    )
+    p.add_argument(
+        "--min-accuracy",
+        type=float,
+        default=None,
+        metavar="X",
+        help="min-accuracy: required accuracy (no default; needed by that objective)",
+    )
+    p.add_argument(
+        "--budget",
+        type=float,
+        default=None,
+        metavar="X",
+        help="max-accuracy: cost cap in USD per task (default: no cap)",
+    )
     p.add_argument("--holdout", type=float, default=0.3, metavar="F", help="held-out share (0.3)")
     p.add_argument("--seed", type=int, default=0, metavar="S", help="split seed (0)")
     level_opt(p, "confidence level of the intervals (0.95)")
@@ -1472,7 +1501,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_id_opt(p, "the latest eval-mode run")
     p.add_argument("--tier", metavar="NAME", default=None, help="tier to calibrate (first tier)")
     p.add_argument(
-        "--truth", choices=("auto", "reference", "audit-tier"), default="auto", help="(auto)"
+        "--truth",
+        choices=("auto", "reference", "audit-tier"),
+        default="auto",
+        help="what counts as correct; see below (auto)",
     )
     p.add_argument("--max-knots", type=int, default=20, metavar="K", help="knot limit (20)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
@@ -1492,7 +1524,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_id_opt(p)
     p.add_argument("--sweep-run-id", metavar="ID", default=None, help="eval run to sweep")
     p.add_argument("-o", "--output", required=True, metavar="OUT", help=".html or .md")
-    p.add_argument("--tolerance", type=float, default=None, metavar="T")
+    p.add_argument(
+        "--tolerance",
+        type=float,
+        default=None,
+        metavar="T",
+        help="acceptable skipped-case error/disagreement (default: audit.tolerance of the run)",
+    )
     level_opt(p)
 
     # runs
@@ -1510,7 +1548,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ledger_opt(p)
     run_id_opt(p)
-    p.add_argument("-o", "--output", required=True, metavar="OUT.jsonl")
+    p.add_argument("-o", "--output", required=True, metavar="OUT.jsonl", help="output file")
 
     # import
     p = add(
@@ -1545,19 +1583,27 @@ def build_parser() -> argparse.ArgumentParser:
     q.set_defaults(func=_cmd_datasets_make)
     q.add_argument("name", metavar="NAME", help="generator (arithmetic)")
     q.add_argument("-n", type=int, required=True, metavar="N", help="number of tasks")
-    q.add_argument("--seed", type=int, default=0, metavar="S")
-    q.add_argument("-o", "--output", required=True, metavar="OUT.jsonl")
-    q.add_argument("--min-steps", type=int, default=None, metavar="K")
-    q.add_argument("--max-steps", type=int, default=None, metavar="K")
+    q.add_argument("--seed", type=int, default=0, metavar="S", help="random seed (0)")
+    q.add_argument("-o", "--output", required=True, metavar="OUT.jsonl", help="output file")
+    q.add_argument(
+        "--min-steps", type=int, default=None, metavar="K", help="fewest operations per task (1)"
+    )
+    q.add_argument(
+        "--max-steps",
+        type=int,
+        default=None,
+        metavar="K",
+        help="most operations per task (6; at most 12)",
+    )
     q = dsub.add_parser(
         "show",
-        help="summarise a task file and print a few tasks",
-        description="summarise a task file and print a few tasks",
+        help="summarize a task file and print a few tasks",
+        description="summarize a task file and print a few tasks",
         epilog="examples:\n  shadowgate datasets show tasks.jsonl --limit 5",
         formatter_class=_Formatter,
     )
     q.set_defaults(func=_cmd_datasets_show)
-    q.add_argument("tasks", metavar="TASKS")
+    q.add_argument("tasks", metavar="TASKS", help="task file (.jsonl/.json/.csv)")
     q.add_argument("--limit", type=int, default=3, metavar="N", help="tasks to print (3)")
     return parser
 

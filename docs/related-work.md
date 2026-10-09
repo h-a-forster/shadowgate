@@ -2,8 +2,7 @@
 
 shadowgate sits at the intersection of three lines of work: LLM cascades and routers,
 confidence/uncertainty signals for language models, and classical survey-sampling
-estimators. This page lists the work it builds on, grouped by topic. Each entry gives
-the authors, year, linked title, venue, and how it relates to shadowgate.
+estimators. This page lists the work it builds on, grouped by topic.
 
 ## Framing
 
@@ -12,13 +11,13 @@ the authors, year, linked title, venue, and how it relates to shadowgate.
   A theoretical framework for metacognitive regulation that monitors processing, generates
   responses and evaluates outcomes to decide when to rely on fast "intuitive" processing versus
   slower analysis. shadowgate borrows the "System 1.5" name for the gate between a cheap model and
-  a strong model; it implements an engineering version of that idea, not the paper's framework.
+  a more capable model; it implements an engineering version of that idea, not the paper's framework.
 
 ## LLM cascades and routers
 
 - **Chen, Zaharia & Zou, 2023.** [FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance](https://arxiv.org/abs/2305.05176). arXiv.
   Calls LLMs in sequence and uses a learned scorer to decide whether to accept an answer or
-  try the next model; evaluated as cost/accuracy trade-offs on labelled datasets.
+  try the next model; evaluated as cost/accuracy trade-offs on labeled datasets.
 - **Aggarwal, Madaan et al., 2024.** [AutoMix: Automatically Mixing Language Models](https://arxiv.org/abs/2310.12963). NeurIPS 2024.
   The small model verifies its own answer with few-shot self-verification, and a POMDP-based
   router uses that noisy confidence to decide whether to escalate.
@@ -87,7 +86,7 @@ the authors, year, linked title, venue, and how it relates to shadowgate.
   Selects which test points to label with non-uniform probabilities and removes the resulting bias
   with importance weights, the same principle as shadowgate's confidence-stratified audit.
 - **Angelopoulos, Bates, Fannjiang, Jordan & Zrnic, 2023.** [Prediction-powered inference](https://doi.org/10.1126/science.adi6000). Science.
-  Valid confidence intervals from a small labelled set plus many model predictions; relevant when
+  Valid confidence intervals from a small labeled set plus many model predictions; relevant when
   a strong-model or judge label is used as a proxy for ground truth.
 
 ## Survey-sampling foundations
@@ -95,7 +94,7 @@ the authors, year, linked title, venue, and how it relates to shadowgate.
 - **Horvitz & Thompson, 1952.** [A Generalization of Sampling Without Replacement from a Finite Universe](https://doi.org/10.1080/01621459.1952.10483446). JASA 47, 663-685.
   Unbiased totals under unequal inclusion probabilities by weighting each sampled unit by 1/π.
 - **Hájek, 1971.** Comment on "An essay on the logical foundations of survey sampling, part one" by D. Basu. In Godambe & Sprott (eds.), *Foundations of Statistical Inference*, Holt, Rinehart and Winston.
-  The ratio (self-normalised) form of the Horvitz-Thompson estimator used for weighted rates.
+  The ratio (self-normalized) form of the Horvitz-Thompson estimator used for weighted rates.
 - **Kish, 1965.** *Survey Sampling*. Wiley.
   Design effects and the effective sample size of a weighted sample, used to size intervals.
 - **Wilson, 1927.** [Probable Inference, the Law of Succession, and Statistical Inference](https://doi.org/10.1080/01621459.1927.10502953). JASA 22, 209-212.
@@ -114,11 +113,11 @@ the authors, year, linked title, venue, and how it relates to shadowgate.
 
 ## What shadowgate adds
 
-Most cascade and router papers evaluate offline, on labelled benchmarks or precomputed outcome
+Most cascade and router papers evaluate offline, on labeled benchmarks or precomputed outcome
 tables, and report a cost/accuracy curve for a fixed dataset. In deployment, the cases the cheap
-model keeps are never checked by the strong model, so their error rate is not observed. shadowgate
-focuses on measuring that rate continuously: it samples kept cases with known, confidence-stratified
-probabilities, re-answers them with the strong model, and reports the skipped-case disagreement
+model answers alone (skipped cases) are never checked by the final tier, so their error rate is
+not observed. shadowgate measures that rate continuously: it samples skipped cases with known,
+confidence-stratified probabilities, re-answers them with the final tier, and reports the skipped-case disagreement
 rate with inverse-probability-weighted confidence intervals. It combines this with offline threshold
 sweeps (Pareto curves, held-out threshold selection) so the threshold chosen offline can be checked
 against what happens in deployment. The estimators themselves are standard survey-sampling and

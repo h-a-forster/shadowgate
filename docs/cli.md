@@ -100,7 +100,7 @@ shadowgate run -c CONFIG -t TASKS [--ledger PATH] [--run-id ID] [--mode {serve,e
 | `-t`, `--tasks` | required | `.jsonl`, `.json` or `.csv` task file. |
 | `--ledger PATH` | `[run] ledger`, else `.shadowgate/ledger.sqlite` | |
 | `--run-id ID` | `<run.name>-<mode>-<timestamp>` | Reuse an id to resume. |
-| `--mode` | `serve` | `serve`: stop at the first accepted tier and sample audits. `eval`: run every tier on every task. |
+| `--mode` | `serve` | `serve`: stop at the first tier whose confidence clears its threshold and sample audits. `eval`: run every tier on every task. |
 | `--limit N` | all | First N tasks only. |
 | `--workers N` | `[run] workers` (4) | Tasks in flight. |
 | `--max-cost USD` | `[run] max_cost_usd` | Spending cap (serving + audit). Exit 4 when reached. |
@@ -208,7 +208,7 @@ Thresholds then apply to the calibrated scale. Re-run eval mode and `sweep` to p
 | `--max-knots K` | `20` | Maximum number of map points (>= 2). |
 | `--json` | off | Machine-readable output. |
 
-It needs at least 10 labelled (confidence, outcome) pairs and exits 2 otherwise.
+It needs at least 10 labeled (confidence, outcome) pairs and exits 2 otherwise.
 
 ## `report`
 

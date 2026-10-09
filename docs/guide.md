@@ -6,12 +6,12 @@ This page explains what shadowgate measures and how to read the numbers. For eve
 ## The problem
 
 A confidence-gated cascade sends each task to a cheap model first. If the cheap model's
-confidence clears a threshold, its answer is served. Otherwise the task escalates to a stronger,
-more expensive model. Oh & Gobet (2024) call this kind of metacognitive gate "System 1.5".
+confidence clears a threshold, its answer is served. Otherwise the task escalates to a more
+capable, more expensive model. Oh & Gobet (2024) call this kind of metacognitive gate "System 1.5".
 
 The cost saving is easy to measure: count how many tasks stopped at the cheap tier. The quality
-cost is not. The cases the cheap tier keeps are, by construction, never seen by the strong tier,
-so nobody observes how often they are wrong. shadowgate estimates that number with a confidence
+cost is not. The cases the cheap tier answers alone are, by construction, never seen by the final
+tier, so nobody observes how often they are wrong. shadowgate estimates that number with a confidence
 interval, in production and offline.
 
 ## Tiers
@@ -26,18 +26,23 @@ task -> tier 0 (cheap) --conf >= t0--> serve
         tier 1 --conf >= t1--> serve
             |
             v
-        last tier (strong) -----------> serve (always)
+        final tier --------------------> serve (always)
 ```
 
-- Tiers are ordered cheapest first. The last tier has no threshold and always serves.
+- Tiers are ordered cheapest first. The final tier has no threshold and always serves.
 - A missing confidence score never accepts. An unparseable `CONFIDENCE:` line escalates rather
   than being read as 0 or 1.
-- A backend error escalates to the next tier. If the last tier fails, the decision is recorded
+- A backend error escalates to the next tier. If the final tier fails, the decision is recorded
   with an error.
-- Vocabulary: a **skipped case** (or kept, or accepted case) is a task served by a non-final tier.
-  The **reference tier** (or audit tier) is the last tier.
 
-More than two tiers work. The audit always compares against the last tier.
+Two terms recur in the rest of the docs and in the output:
+
+- **Final tier**: the last tier in the cascade. It always serves and is the tier that shadow
+  audits compare against (its audit tier role).
+- **Skipped case**: a task answered by a non-final tier without escalating, so the final tier
+  never saw it.
+
+More than two tiers work. The audit always compares against the final tier.
 
 ## Confidence signals
 
@@ -47,7 +52,7 @@ More than two tiers work. The audit always compares against the last tier.
 | `logprob` | 0 | a backend that returns token logprobs (OpenAI-compatible servers; not Anthropic or the Claude Code CLI) | No prompt change. Mean token probability over the whole reply mixes reasoning tokens with answer tokens; `min` is stricter, `geo_mean` sits between. |
 | `self_consistency` | `samples` (default 5) | sampling at nonzero temperature to be informative | Strong signal on tasks with a short checkable answer. Multiplies the cheap tier's cost by about `1 + samples`. Models that repeat the same mistake agree with themselves. |
 | `monitor` | 1 on the monitor backend | a second model (often the cheap one again) | Separates answering from grading. Costs one extra call; the monitor's own calibration is unknown until you sweep it. |
-| `combine` | sum of members | members | `min` is conservative: escalate if any signal is low. `ignore_missing` controls whether one missing member blocks acceptance. |
+| `combine` | sum of members | members | `min` is conservative: escalate if any signal is low. `ignore_missing` controls whether one missing member forces escalation. |
 | `calibrated` | same as `base` | eval-mode data to fit the map (`shadowgate calibrate`) | Remaps scores so a threshold of 0.9 means about 90% correct. The map is monotone, so it keeps the ranking (up to ties) and the accuracy/cost frontier; it changes which threshold value lands where. |
 
 What matters for routing is ranking: a higher score should mean a more likely correct answer.
@@ -58,7 +63,7 @@ for each non-final tier, so you can compare signals on your own tasks before cho
 
 | | Serve mode (`--mode serve`, default) | Eval mode (`--mode eval`) |
 |---|---|---|
-| Tiers called | until the first accepted tier | every tier, every task |
+| Tiers called | until a tier's confidence clears its threshold | every tier, every task |
 | Cost | what production costs, plus sampled audits | sum of all tiers |
 | Audit | a random sample of skipped cases, weighted by 1/π | every skipped case, π = 1 |
 | Output | `audit`: skipped-case error estimate for the configured threshold | `sweep`: any threshold, simulated after the fact |
@@ -66,7 +71,8 @@ for each non-final tier, so you can compare signals on your own tasks before cho
 
 Eval mode records what the router would have done at the configured thresholds, and also every
 tier's answer and confidence. `sweep` then replays the routing rule for every threshold on a grid
-without new model calls. A typical sequence:
+without new model calls. `shadowgate init` writes an offline starter config and 20 tasks, so
+you can try the whole sequence without a key. A typical sequence:
 
 1. Run eval mode on a few hundred representative tasks, ideally with references.
 2. Optionally, `shadowgate calibrate` to remap the cheap tier's confidence, then re-run eval mode.
@@ -86,7 +92,7 @@ points where no other point is both cheaper and more accurate. It also reports t
 correct. The oracle's cost is a lower bound no real router reaches.
 
 The recommendation is chosen on a random selection split (70% by default) and re-evaluated on the
-held-out split (30%). Picking the best of 80+ thresholds on the same data you report on is
+held-out split (30%). Picking the best of many thresholds on the same data you report on is
 optimistic; the held-out row is the number to trust. When the held-out accuracy falls below the
 selection target, the output says so. With `--holdout 0` the output states that its estimates are
 in-sample.
@@ -98,13 +104,13 @@ Objectives:
 - `max-accuracy`: most accurate point with cost per task <= `--budget`.
 
 When tasks have references, accuracy means correctness. Without references it means agreement
-with the last tier, and the last tier counts as correct by definition (`truth: audit-tier`).
+with the final tier, and the final tier counts as correct by definition (`truth: audit-tier`).
 
 ## Audit sampling and weighting
 
 In serve mode, each skipped case is selected for a shadow audit with a known inclusion
 probability π. Selection is a reproducible draw from sha256 of the audit seed, run id and task
-id. Selected cases are re-answered by the last tier and the two answers are compared with the
+id. Selected cases are re-answered by the final tier and the two answers are compared with the
 audit judge (by default the `[answer]` comparator).
 
 π depends on the served confidence through `[audit] strata`:
@@ -116,7 +122,7 @@ strata = [[0.8, 0.9, 0.3], [0.9, 1.0, 0.1]] # π = 0.3 in [0.8, 0.9), 0.1 in [0.
 floor = 0.02                                # π never goes below this
 ```
 
-Borderline acceptances are where errors concentrate, so they get audited more. That makes the
+Skipped cases just above the threshold are where errors concentrate, so they get audited more. That makes the
 audited sample unrepresentative: a plain average over audited cases would over-count the
 borderline band and overstate the error rate. shadowgate weights each audited case by 1/π and
 reports the Hájek ratio estimate
@@ -157,57 +163,57 @@ Status: BREACH - Skipped-case error vs references exceeds tolerance 5%: the lowe
   above it.
 
 The fast tier (fast) answered 65% of 400 tasks without escalating. On those, it disagrees with slow
-  on an estimated 10.8% (95% CI 5.1-19.4%, 89 audits, n_eff 84). Against reference answers, the kept
-  answers are wrong on 12.3% (95% CI 8.9-16.9%, 260 graded). That is about 32.0 wrong answers among
-  the 260 kept (23.0-43.8).
+  on an estimated 10.8% (95% CI 5.1-19.4%, 89 audits, n_eff 84). Against reference answers, the
+  skipped cases are wrong on 12.3% (95% CI 8.9-16.9%, 260 graded). That is about 32.0 wrong answers
+  among the 260 skipped cases (23.0-43.8).
 
-  Kept by fast tier:               65.0%  (260 of 400 tasks)
+  Answered by fast tier:           65.0%  (260 of 400 tasks)
   Escalation rate:                 35.0%  (95% CI 30.5-39.8%)
   Served accuracy:                 92.0%  (95% CI 88.9-94.3%, 400 graded)
   Cost per task:                   $0.00038
   Savings vs always slow:          54.8%  (95% CI 53.6-55.9%; always slow: $0.00084/task)
   Audit overhead:                  44.6%  ($0.068 audit spend)
-  Expected wrong-but-kept:         32.0  (95% CI 23.0-43.8)
+  Expected wrong skipped cases:    32.0  (95% CI 23.0-43.8)
 
 By confidence bin:
-  bin              kept  audited  disagreement (CI)           error vs refs (CI)
-  [0.50, 0.70)       13        7  100% (59.0-100.0%)          100% (77.2-100.0%)
-  [0.70, 0.80)       15        9  77.8% (40.0-97.2%)          86.7% (62.1-96.3%)
-  [0.80, 0.90)        6        4  75.0% (19.4-99.4%)          66.7% (30.0-90.3%)
-  [0.90, 0.95)        3        0  -                           33.3% (6.1-79.2%)
-  [0.95, 1.00]      223       69  0% (0.0-5.2%)               0.45% (0.1-2.5%)
+  bin            skipped  audited  disagreement (CI)           error vs refs (CI)
+  [0.50, 0.70)        13        7  100% (59.0-100.0%)          100% (77.2-100.0%)
+  [0.70, 0.80)        15        9  77.8% (40.0-97.2%)          86.7% (62.1-96.3%)
+  [0.80, 0.90)         6        4  75.0% (19.4-99.4%)          66.7% (30.0-90.3%)
+  [0.90, 0.95)         3        0  -                           33.3% (6.1-79.2%)
+  [0.95, 1.00]       223       69  0% (0.0-5.2%)               0.45% (0.1-2.5%)
 ```
 
 | Field | Meaning |
 |---|---|
-| disagreement on kept | Weighted share of skipped cases where the last tier gives a different answer. Needs no references. |
-| error on kept | Share of skipped cases whose served answer is wrong against the task reference. Every skipped case with a reference is graded, so this is an unweighted Wilson interval over all of them, not only the audited ones. |
-| expected wrong-but-kept | The error (or disagreement) rate times the number of skipped cases, with its interval. |
+| disagreement on skipped | Weighted share of skipped cases where the final tier gives a different answer. Needs no references. |
+| error on skipped | Share of skipped cases whose served answer is wrong against the task reference. Every skipped case with a reference is graded, so this is an unweighted Wilson interval over all of them, not only the audited ones. |
+| expected wrong skipped cases | The error (or disagreement) rate times the number of skipped cases, with its interval. |
 | escalation rate | Share of tasks that went past the first tier. |
 | served accuracy | Accuracy of what was actually served, all tiers together (needs references). |
-| est. savings vs \<last tier\> | 1 - serving cost / estimated cost of sending every task to the last tier. The all-last-tier cost is estimated from last-tier attempts on escalated and audited cases, weighted by 1/π. Excludes audit cost. |
+| est. savings vs \<final tier\> | 1 - serving cost / estimated cost of sending every task to the final tier. The all-final-tier cost is estimated from final-tier attempts on escalated and audited cases, weighted by 1/π. Excludes audit cost. |
 | audit overhead | Audit spend as a share of serving spend. |
 | by confidence bin | Disagreement and error per confidence band. Shows whether errors cluster near the threshold. |
 | status | `ok`, `breach`, `inconclusive`, `no-data` or `n/a`; see [cli.md](cli.md#audit). |
 
-In the example above, the threshold of 0.55 is too permissive. The 223 kept answers at
+In the example above, the threshold of 0.55 is too permissive. The 223 skipped cases at
 confidence 0.95 or above are almost all right; the 37 below 0.95 are mostly wrong. The error
 interval (8.9-16.9%) lies entirely above the 5% tolerance, so the status is `breach`.
 
-Disagreement (10.8%) and error (12.3%) agree here because the simulated slow tier is near-perfect.
+Disagreement (10.8%) and error (12.3%) agree here because the simulated `slow` tier is near-perfect.
 With a weaker final tier, both tiers can make the same mistake and agree on it, and disagreement
 then understates error. The disagreement interval is also wider: it rests on 89 audits, while the
-error rate uses all 260 graded kept answers. Keep references for at least a calibration set.
+error rate uses all 260 graded skipped cases. Keep references for at least a calibration set.
 
 The status uses the error rate when every skipped case has a reference, otherwise the
 disagreement rate. `inconclusive` means the interval still contains the tolerance; the output
-estimates how many more audits (or, when every kept case is already graded, more tasks) would
+estimates how many more audits (or, when every skipped case is already graded, more tasks) would
 move it to `ok` or `breach` if the observed rate holds.
 
 ## Choosing a tolerance and an audit rate
 
-The tolerance is a product decision: the share of kept answers you accept being wrong (or, without
-references, different from the strong model). Set it before looking at results.
+The tolerance is a product decision: the share of skipped cases you accept being wrong (or, without
+references, different from the final tier). Set it before looking at results.
 
 The audit rate follows from how tight the interval must be. With a 95% interval, the number of
 effective audits needed for a half-width `h` around a rate `p` is about
@@ -226,8 +232,9 @@ and a target of 457 effective audits per week, a uniform rate of about 1.3% is e
 sampling needs more raw audits for the same `n_eff`, because unequal weights reduce it; it pays
 off when errors concentrate in the oversampled band.
 
-Audit cost is roughly `audit rate × skipped cases × last-tier cost per call`. At a 10% rate on a
-cascade that keeps half its traffic, audits add about 5% of an all-strong-model bill.
+Audit cost is roughly `audit rate × skipped cases × final-tier cost per call`. At a 10% rate on a
+cascade that answers half its traffic at the cheap tier, audits add about 5% of an
+all-final-tier bill.
 
 To read a breach early, oversample the band nearest the threshold. To keep cost down on a
 tier with very high confidence, use a low rate in the top band with a floor of at least 0.01.
@@ -282,7 +289,7 @@ returns the cascade and run settings from a TOML file. The `callable` confidence
 
 ## Limitations
 
-- **The audit tier is a proxy.** Disagreement with the last tier is not error unless tasks carry
+- **The audit tier is a proxy.** Disagreement with the final tier is not error unless tasks carry
   references. When both tiers make the same mistake, disagreement understates error.
 - **Comparator and judge errors.** Agreement is decided by a comparator. A `numeric` comparator
   on free text, or a model `judge` that misreads equivalent answers, biases the rate in either

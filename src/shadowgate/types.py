@@ -152,7 +152,7 @@ class Completion:
     "unknown" and report it, never as zero. ``logprobs`` holds per-output-token log
     probabilities when the backend returned them. ``cached`` is True when served from the
     local response cache (cost and latency still report the original call's values).
-    ``stop_reason`` is the provider's normalised stop reason ("end", "max_tokens", "refusal",
+    ``stop_reason`` is the provider's normalized stop reason ("end", "max_tokens", "refusal",
     "stop_sequence", "error" or a provider-specific string).
     """
 
@@ -301,7 +301,7 @@ class Attempt:
 
     ``accepted`` is what the router decided at ``threshold`` (always True for a final tier that
     produced an answer). ``correct`` grades ``answer`` against ``task.reference`` when one
-    exists. ``agreement`` compares ``answer`` with the reference tier's (last tier's) answer;
+    exists. ``agreement`` compares ``answer`` with the final tier's answer;
     it is filled in eval mode for every non-final attempt, and for shadow-audited decisions.
     """
 
@@ -340,13 +340,13 @@ class Attempt:
 
 @dataclass(frozen=True)
 class ShadowResult:
-    """The shadow audit of an accepted (non-escalated) answer.
+    """The shadow audit of a skipped case (an answer served by a non-final tier).
 
     The audit tier re-answers the task out of band. ``inclusion_prob`` is the probability with
     which this decision was selected for audit; estimators weight by 1/inclusion_prob
     (Horvitz-Thompson / Hajek) so confidence-stratified sampling stays unbiased.
     ``status`` is "done", "pending" (deferred mode, not yet run), "error", or "skipped" (not
-    selected for audit; recorded so every accepted case's inclusion probability is known).
+    selected for audit; recorded so every skipped case's inclusion probability is known).
     """
 
     audit_tier: str

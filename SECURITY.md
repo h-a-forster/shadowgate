@@ -12,9 +12,10 @@
 Please do not report security vulnerabilities through public issues, discussions or pull
 requests.
 
-Report them privately through GitHub's private vulnerability reporting: open the repository's
-**Security** tab and choose **Report a vulnerability** (this creates a draft security advisory
-visible only to the maintainers). Include a description of the issue, steps to reproduce, the
+Report them privately through GitHub's private vulnerability reporting:
+<https://github.com/h-a-forster/shadowgate/security/advisories/new> (or the repository's
+**Security** tab, **Report a vulnerability**). This creates a draft security advisory visible
+only to the maintainers. Include a description of the issue, steps to reproduce, the
 affected version, and the impact you expect.
 
 You can expect an initial response within a few days. Fixes are released as patch versions and

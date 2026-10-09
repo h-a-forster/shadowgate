@@ -2,8 +2,9 @@
 #
 # One-time setup (required before the first release):
 #   1. On PyPI, add a trusted publisher for this project (for a project that does not exist on
-#      PyPI yet, add a "pending publisher" under Account settings -> Publishing). Enter the GitHub
-#      owner, the repository name, workflow filename `release.yml`, and environment name `pypi`.
+#      PyPI yet, add a "pending publisher" under Account settings -> Publishing). Enter the PyPI
+#      project name `shadowgate-llm`, the GitHub owner, the repository name, workflow filename
+#      `release.yml`, and environment name `pypi`.
 #   2. In this GitHub repository, create an environment named `pypi`
 #      (Settings -> Environments). Optionally add required reviewers and restrict it to `v*` tags.
 # No PyPI API token is stored anywhere: publishing uses OpenID Connect (`id-token: write`).
@@ -22,8 +23,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    name: Lint, type-check and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # setup-uv no longer publishes floating major tags; Dependabot keeps this pin current.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --all-groups --locked
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy
+      - name: Pytest
+        run: uv run pytest
+
   build:
     name: Build distributions
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,15 +57,17 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.12"
-      - name: Check tag matches package version
-        run: |
-          version=$(uv version --short)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match project version $version" >&2
-            exit 1
-          fi
       - name: Build sdist and wheel
         run: uv build
+      # The version is dynamic (read from src/shadowgate/__init__.py), so check the built files.
+      - name: Check tag matches package version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ ! -f "dist/shadowgate_llm-$version-py3-none-any.whl" ] || [ ! -f "dist/shadowgate_llm-$version.tar.gz" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match the built distributions:" >&2
+            ls dist >&2
+            exit 1
+          fi
       - name: Smoke-test the wheel
         run: |
           uv venv "$RUNNER_TEMP/smoke"
@@ -61,7 +86,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: pypi
-      url: https://pypi.org/project/shadowgate/
+      url: https://pypi.org/project/shadowgate-llm/
     permissions:
       id-token: write
     steps:
