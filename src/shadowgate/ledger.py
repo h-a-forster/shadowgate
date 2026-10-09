@@ -88,6 +88,9 @@ class RunInfo:
     config: Mapping[str, Any] = field(default_factory=dict)
 
 
+_RUN_HEADER = "shadowgate_run"
+
+
 # --------------------------------------------------------------------------- helpers
 
 
@@ -457,35 +460,104 @@ class Ledger:
     # ------------------------------------------------------------------ JSONL
 
     def export_jsonl(self, path: str | Path, run_id: str | None = None) -> int:
-        """Write one ``Decision.to_dict()`` JSON object per line; returns the count."""
+        """Write the run's metadata, then one ``Decision.to_dict()`` per line; returns the count.
+
+        The first line is ``{"shadowgate_run": {...}}`` with the run's mode, note and redacted
+        config snapshot, so an import restores settings such as ``audit.tolerance``.
+        """
+        rid = self._resolve_run(run_id)
+        info = next((r for r in self.runs() if r.run_id == rid), None)
         p = Path(path)
         if p.parent != Path():
             p.parent.mkdir(parents=True, exist_ok=True)
         n = 0
         with p.open("w", encoding="utf-8", newline="\n") as fh:
-            for d in self.decisions(run_id):
+            if info is not None:
+                header = {
+                    "run_id": info.run_id,
+                    "created_at": info.created_at,
+                    "mode": info.mode,
+                    "note": info.note,
+                    "config": dict(info.config),
+                }
+                fh.write(_dumps({_RUN_HEADER: header}))
+                fh.write("\n")
+            for d in self.decisions(rid):
                 fh.write(_dumps(d.to_dict()))
                 fh.write("\n")
                 n += 1
         return n
 
     def import_jsonl(self, path: str | Path) -> int:
-        """Upsert decisions from a JSONL file (one Decision dict per line); returns the count.
+        """Upsert decisions from a JSONL file written by ``export_jsonl``; returns the count.
 
-        The whole file is validated before anything is written, then written in one transaction.
+        Run metadata lines (``{"shadowgate_run": ...}``) create the run with its config, or fill
+        in the config of an existing run that has none. Files without them still import; the
+        runs then have an empty config. The whole file is validated before anything is written,
+        then written in one transaction.
         """
         items: list[Decision] = []
+        headers: list[dict[str, Any]] = []
         with Path(path).open(encoding="utf-8") as fh:
             for lineno, line in enumerate(fh, 1):
                 if not line.strip():
                     continue
                 try:
-                    items.append(Decision.from_dict(json.loads(line)))
+                    obj = json.loads(line)
+                    if isinstance(obj, dict) and _RUN_HEADER in obj:
+                        h = obj[_RUN_HEADER]
+                        if (
+                            not isinstance(h, dict)
+                            or not isinstance(h.get("run_id"), str)
+                            or not isinstance(h.get("mode"), str)
+                        ):
+                            raise ValueError("run header needs string run_id and mode")
+                        headers.append(h)
+                    else:
+                        items.append(Decision.from_dict(obj))
                 except (ValueError, KeyError, TypeError, AttributeError) as exc:
-                    raise LedgerError(f"{path}:{lineno}: invalid decision record: {exc}") \
-                        from exc
+                    raise LedgerError(
+                        f"{path}:{lineno}: invalid decision record: {exc}"
+                    ) from exc
+        for h in headers:
+            self._import_run_header(h)
         self._write_decisions(items)
         return len(items)
+
+    def _import_run_header(self, h: Mapping[str, Any]) -> None:
+        config_json = _dumps(redact_config(dict(h.get("config") or {})))
+        with self._lock:
+            self._check_open()
+            conn = self._conn
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(
+                    "SELECT mode, config_json FROM runs WHERE run_id = ?", (h["run_id"],)
+                ).fetchone()
+                if row is None:
+                    conn.execute(
+                        "INSERT INTO runs (run_id, created_at, mode, config_json, note) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (h["run_id"], str(h.get("created_at") or _utc_now()), h["mode"],
+                         config_json, str(h.get("note") or "")),
+                    )
+                elif row[0] != h["mode"]:
+                    raise LedgerError(
+                        f"run {h['run_id']!r} already exists with mode {row[0]!r}; the import "
+                        f"has mode {h['mode']!r}"
+                    )
+                elif row[1] in ("", "{}"):
+                    conn.execute(
+                        "UPDATE runs SET config_json = ? WHERE run_id = ?",
+                        (config_json, h["run_id"]),
+                    )
+                conn.execute("COMMIT")
+            except BaseException as exc:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+                if isinstance(exc, sqlite3.Error):
+                    raise LedgerError(f"ledger {self.path}: write failed: {exc}") from exc
+                raise
 
     # ------------------------------------------------------------------ lifecycle
 

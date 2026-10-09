@@ -197,8 +197,9 @@ Lists run id, mode, number of decisions and creation time (UTC).
 shadowgate export [--ledger PATH] [--run-id ID] -o OUT.jsonl
 ```
 
-Writes one JSON decision per line: the task, every attempt with its completion, confidence,
-grading and cost, and the shadow audit result.
+The first line is a run header: run id, mode, note, creation time and the redacted config. Each
+following line is one decision: the task, every attempt with its completion, confidence, grading
+and cost, and the shadow audit result.
 
 ## `datasets`
 

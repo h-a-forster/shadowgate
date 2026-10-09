@@ -253,7 +253,8 @@ def test_export_import_round_trip(tmp_path: Path) -> None:
             a.record(d)
         assert a.export_jsonl(out) == 5
     lines = out.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 5 and json.loads(lines[0])["task"]["id"] == "t0"
+    assert len(lines) == 6 and json.loads(lines[0])["shadowgate_run"]["run_id"] == "r1"
+    assert json.loads(lines[1])["task"]["id"] == "t0"
     with Ledger(tmp_path / "b.sqlite") as b:
         assert b.import_jsonl(out) == 5
         assert list(b.decisions("r1")) == ds
@@ -428,3 +429,33 @@ def test_migrates_v1_ledger_in_place(tmp_path: Path) -> None:
     assert version == str(Ledger.SCHEMA_VERSION) == "2"
     assert "error" in cols
     Ledger(path).close()  # reopening a migrated file is a no-op
+
+
+def test_export_header_restores_run_config(tmp_path: Path) -> None:
+    out = tmp_path / "out.jsonl"
+    with Ledger(tmp_path / "src.sqlite") as a:
+        a.start_run("r1", config={"audit": {"tolerance": 0.05}}, mode="serve", note="n")
+        a.record(make_decision("r1", "t0", mode="serve"))
+        a.export_jsonl(out, "r1")
+    with Ledger(tmp_path / "dst.sqlite") as b:
+        assert b.import_jsonl(out) == 1
+        (info,) = b.runs()
+        assert info.config == {"audit": {"tolerance": 0.05}}
+        assert info.mode == "serve" and info.note == "n"
+
+
+def test_import_header_mode_conflict(tmp_path: Path) -> None:
+    out = tmp_path / "h.jsonl"
+    out.write_text(json.dumps({"shadowgate_run": {"run_id": "r1", "mode": "eval"}}),
+                   encoding="utf-8")
+    with Ledger(tmp_path / "dst.sqlite") as b:
+        b.start_run("r1", config={}, mode="serve")
+        with pytest.raises(LedgerError, match="mode"):
+            b.import_jsonl(out)
+
+
+def test_import_rejects_bad_header(tmp_path: Path) -> None:
+    out = tmp_path / "h.jsonl"
+    out.write_text(json.dumps({"shadowgate_run": {"mode": "eval"}}), encoding="utf-8")
+    with Ledger(tmp_path / "dst.sqlite") as b, pytest.raises(LedgerError, match=":1:"):
+        b.import_jsonl(out)

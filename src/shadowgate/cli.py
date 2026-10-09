@@ -1502,7 +1502,7 @@ def build_parser() -> argparse.ArgumentParser:
     # export
     p = add(
         "export",
-        "export a run's decisions as JSONL (one decision per line)",
+        "export a run's decisions as JSONL (a run header line, then one decision per line)",
         "examples:\n  shadowgate export -o decisions.jsonl\n"
         "  shadowgate export --run-id nightly -o nightly.jsonl",
         _cmd_export,
@@ -1517,8 +1517,8 @@ def build_parser() -> argparse.ArgumentParser:
         "import exported decisions (JSONL) into a ledger, creating it if needed",
         "examples:\n  shadowgate import nightly.jsonl\n"
         "  shadowgate import a.jsonl b.jsonl --ledger merged.sqlite\n\n"
-        "Decisions are upserted by (run id, task id). Run config snapshots are not part of an\n"
-        "export, so pass --tolerance to `audit`/`report` for imported runs.",
+        "Decisions are upserted by (run id, task id). The run header restores the run's mode,\n"
+        "note and redacted config, so `audit` and `report` pick up its tolerance.",
         _cmd_import,
     )
     p.add_argument("files", nargs="+", metavar="FILE.jsonl", help="exported decision files")

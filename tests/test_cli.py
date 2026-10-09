@@ -586,8 +586,9 @@ def test_export_round_trip(
     assert code == 0
     assert f"wrote {N_TASKS} decisions of run s1" in capsys.readouterr().out
     lines = out.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == N_TASKS
-    decisions = [Decision.from_dict(json.loads(line)) for line in lines]
+    assert len(lines) == N_TASKS + 1
+    assert json.loads(lines[0])["shadowgate_run"]["run_id"] == "s1"
+    decisions = [Decision.from_dict(json.loads(line)) for line in lines[1:]]
     assert {d.run_id for d in decisions} == {"s1"}
     with Ledger(workspace["ledger"]) as led:
         assert [d.task.id for d in led.decisions("s1")] == [d.task.id for d in decisions]
