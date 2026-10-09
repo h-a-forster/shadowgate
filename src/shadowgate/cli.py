@@ -17,6 +17,7 @@ import math
 import os
 import sys
 import textwrap
+import time
 import tomllib
 import traceback
 from collections.abc import Callable, Mapping, Sequence
@@ -74,7 +75,7 @@ DEMO_CONFIG = """\
 # A simulated model answers task i correctly with probability sigmoid(skill - difficulty_i),
 # where difficulty comes from each task's meta.difficulty (the built-in arithmetic generator
 # uses roughly 2-17). Its verbal confidence tracks that probability plus `overconfidence`
-# and noise, so the fast tier below is a cheap, somewhat overconfident model.
+# and noise, so the fast tier below is a cheap, clearly overconfident model.
 
 [run]
 name = "simulated-demo"
@@ -84,21 +85,22 @@ cache = false
 
 [backends.fast]
 type = "simulated"
-skill = 8.0              # solves easy and medium problems, struggles with long ones
-overconfidence = 0.1     # reports ~0.1 more confidence than its accuracy warrants
-confidence_noise = 0.1
+skill = 8.5              # solves easy and medium problems, struggles with long ones
+overconfidence = 0.35    # reports ~0.35 more confidence than its accuracy warrants
+discrimination = 0.4     # right answers still score higher than wrong ones
+confidence_noise = 0.03
 pricing = { input = 0.10, output = 0.50 }      # USD per million tokens
 
 [backends.slow]
 type = "simulated"
-skill = 16.0             # much stronger, much more expensive
+skill = 24.0             # much stronger (near-perfect here), much more expensive
 overconfidence = 0.0
 pricing = { input = 4.00, output = 20.00 }
 
 [[tiers]]
 name = "fast"
 backend = "fast"
-threshold = 0.8
+threshold = 0.55                    # too permissive for this model: the audit shows it
 confidence = { type = "verbal" }    # the model ends with "CONFIDENCE: <0-1>"
 
 [[tiers]]
@@ -114,7 +116,7 @@ mode = "inline"
 rate = 0.2               # audit 20% of accepted cases outside the strata below
 floor = 0.05
 # [lo, hi, rate] on the fast tier's confidence: audit borderline acceptances more often.
-strata = [[0.8, 0.9, 0.5], [0.9, 1.0, 0.2]]
+strata = [[0.55, 0.9, 0.6], [0.9, 1.0, 0.3]]
 tolerance = 0.05         # acceptable disagreement rate on skipped cases
 """
 
@@ -368,7 +370,13 @@ def _report_module() -> Any:
 
 
 class _Progress:
-    """Single updating line on a TTY; plain periodic lines otherwise. Writes to stderr."""
+    """Single updating line on a TTY; plain periodic lines otherwise. Writes to stderr.
+
+    Redraws are throttled (TTY: at most every ``TTY_INTERVAL_S`` plus the final line; otherwise
+    one line per 10% of tasks) so console output never dominates the run time.
+    """
+
+    TTY_INTERVAL_S = 0.15
 
     def __init__(self, label: str, *, enabled: bool = True) -> None:
         self.label = label
@@ -376,11 +384,20 @@ class _Progress:
         self.tty = enabled and bool(getattr(sys.stderr, "isatty", lambda: False)())
         self._width = 0
         self._last_pct = -1
+        self._last_draw = -math.inf
 
     def __call__(self, stats: RunStats, _d: Decision) -> None:
         if not self.enabled:
             return
         done = stats.completed + stats.skipped_existing
+        if self.tty and done < stats.total:
+            now = time.monotonic()
+            if now - self._last_draw < self.TTY_INTERVAL_S:
+                return
+            self._last_draw = now
+        elif not self.tty and done < stats.total:
+            if (100 * done // max(stats.total, 1)) // 10 <= self._last_pct:
+                return
         total = max(stats.total, 1)
         line = (
             f"{self.label}: {done}/{stats.total} ({100 * done // total}%)  "
@@ -500,11 +517,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             _out(f"  {mode:<5} run {run_id}: {stats.summary_line()}")
             if stats.stopped:
                 return _stop_exit_code(stats.stopped)
-        summary = _summarize(list(ledger.decisions(serve_id)), settings.tolerance)
+        serve_decisions = list(ledger.decisions(serve_id))
+        summary = _summarize(serve_decisions, settings.tolerance)
         sweep_result = _sweep(list(ledger.decisions(eval_id)), seed=args.seed)
 
     _out("")
     _print_demo_summary(summary, sweep_result, float(raw_tiers[0]["threshold"]))
+    _out("")
+    _out(_demo_conclusion(summary, serve_decisions, raw_tiers[0]["name"]))
     report = _report_module()
     html_path = report.write_report(out / "report.html", summary, sweep_result)
     md_path = report.write_report(out / "report.md", summary, sweep_result)
@@ -512,11 +532,46 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     _out(f"report: {html_path} (also {md_path.name})")
     _out(f"explore: shadowgate audit --ledger {ledger_path} --run-id {serve_id}")
     _out(f"         shadowgate sweep --ledger {ledger_path} --run-id {eval_id}")
+    _out(f"next:    shadowgate calibrate --ledger {ledger_path} --run-id {eval_id}")
     if args.open:
         import webbrowser
 
         webbrowser.open(Path(html_path).resolve().as_uri())
     return EXIT_OK
+
+
+def _demo_conclusion(summary: AuditSummary, decisions: Sequence[Decision], tier: str) -> str:
+    """One plain sentence: reported confidence on kept answers vs the audited disagreement."""
+    kept = [
+        float(d.attempts[0].confidence.score)
+        for d in decisions
+        if d.error is None
+        and not d.escalated
+        and d.attempts
+        and d.attempts[0].confidence is not None
+        and d.attempts[0].confidence.score is not None
+    ]
+    ref = summary.reference_tier or "the final tier"
+    dis = summary.disagreement
+    if not kept or dis is None or dis.value is None:
+        return f"The {tier} tier kept no audited answers, so there is nothing to compare yet."
+    conf = sum(kept) / len(kept)
+    ci = ""
+    if dis.lo is not None and dis.hi is not None:
+        ci = f" ({100 * summary.level:.0f}% CI {100 * dis.lo:.0f}-{100 * dis.hi:.0f}%)"
+    text = (
+        f"The {tier} tier reports {100 * conf:.0f}% mean confidence on the answers it keeps; "
+        f"the audit estimates {100 * dis.value:.0f}% of them disagree with the {ref} tier{ci}"
+    )
+    implied = 1.0 - conf
+    if dis.lo is not None and dis.lo > implied:
+        text += f", more than the {100 * implied:.0f}% its confidence implies"
+    elif dis.value > implied:
+        text += (
+            f", more than the {100 * implied:.0f}% its confidence implies "
+            "(though the interval includes it)"
+        )
+    return text + "."
 
 
 def _print_demo_summary(summary: AuditSummary, sw: SweepResult, threshold: float) -> None:
@@ -809,6 +864,265 @@ def _cmd_sweep(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+# --------------------------------------------------------------------------- calibrate
+
+_MIN_CALIBRATION_PAIRS = 10
+
+
+def _interp(points: Sequence[tuple[float, float]], x: float) -> float:
+    """Piecewise-linear map with clamping, as ``confidence.Calibrated.apply`` computes it."""
+    if x <= points[0][0]:
+        return points[0][1]
+    if x >= points[-1][0]:
+        return points[-1][1]
+    lo = 0
+    hi = len(points) - 1
+    while hi - lo > 1:  # binary search for the segment containing x
+        mid = (lo + hi) // 2
+        if points[mid][0] <= x:
+            lo = mid
+        else:
+            hi = mid
+    (x0, y0), (x1, y1) = points[lo], points[hi]
+    return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+
+
+def _thin_knots(knots: Sequence[tuple[float, float]], k: int) -> list[tuple[float, float]]:
+    """At most ``k`` knots: keep both ends, greedily drop the interior knot whose removal
+    changes the interpolated curve least. A subset of a monotone knot list stays monotone."""
+    pts = list(knots)
+    k = max(2, k)
+    while len(pts) > k:
+        best_i, best_dev = 1, math.inf
+        for i in range(1, len(pts) - 1):
+            (x0, y0), (x1, y1), (x2, y2) = pts[i - 1], pts[i], pts[i + 1]
+            dev = abs(y1 - (y0 + (y2 - y0) * (x1 - x0) / (x2 - x0)))
+            if dev < best_dev:
+                best_i, best_dev = i, dev
+        del pts[best_i]
+    return pts
+
+
+def _round_knots(knots: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Round to 4 d.p., merging knots whose x collide (rounding is monotone, so y stays sorted)."""
+    out: list[tuple[float, float]] = []
+    for x, y in knots:
+        rx, ry = round(x, 4), min(1.0, max(0.0, round(y, 4)))
+        if out and rx <= out[-1][0]:
+            out[-1] = (out[-1][0], max(out[-1][1], ry))
+        else:
+            out.append((rx, ry))
+    return out
+
+
+def _fit_points(
+    scores: Sequence[float], labels: Sequence[bool], k: int
+) -> list[tuple[float, float]]:
+    from .sweep import fit_isotonic
+
+    return _round_knots(_thin_knots(fit_isotonic(scores, labels), k))
+
+
+def _cal_metrics(scores: Sequence[float], labels: Sequence[bool]) -> dict[str, float | None]:
+    from . import stats
+
+    if not scores or not all(0.0 <= s <= 1.0 for s in scores):
+        return {"ece": None, "brier": None}
+    return {"ece": stats.ece(scores, labels), "brier": stats.brier(scores, labels)}
+
+
+def _toml_value(v: Any) -> str:
+    """Inline TOML for a JSON-like value (the config snapshot holds only such values)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        return json.dumps(v)  # JSON string escapes are valid TOML basic-string escapes
+    if isinstance(v, Mapping):
+        if not v:
+            return "{}"
+        items = ", ".join(f"{_toml_key(str(k))} = {_toml_value(x)}" for k, x in v.items())
+        return "{ " + items + " }"
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    raise UsageError(f"cannot write {type(v).__name__} value {v!r} as TOML")
+
+
+def _toml_key(k: str) -> str:
+    bare = k and all(c.isalnum() or c in "-_" for c in k) and k.isascii()
+    return k if bare else json.dumps(k)
+
+
+def _tier_confidence_spec(ledger: Ledger, run_id: str, tier: str) -> Mapping[str, Any] | None:
+    for r in ledger.runs():
+        if r.run_id != run_id or not isinstance(r.config, Mapping):
+            continue
+        tiers = r.config.get("tiers")
+        if not isinstance(tiers, list):
+            return None
+        for t in tiers:
+            if isinstance(t, Mapping) and t.get("name") == tier:
+                spec = t.get("confidence")
+                return spec if isinstance(spec, Mapping) and spec.get("type") else None
+    return None
+
+
+def _calibration_pairs(
+    decisions: Sequence[Decision], tier: str, truth: str
+) -> tuple[list[float], list[bool], str, int, int]:
+    """(scores, labels, resolved truth, n undecided, n attempts with a score)."""
+    scored = []
+    for d in decisions:
+        for a in d.attempts:
+            if a.tier != tier or a.error is not None or a.confidence is None:
+                continue
+            s = a.confidence.score
+            if s is None or not math.isfinite(float(s)):
+                continue
+            scored.append((float(s), a))
+    if truth == "auto":
+        has_ref = bool(scored) and all(a.correct is not None for _, a in scored)
+        truth = "reference" if has_ref else "audit-tier"
+    scores: list[float] = []
+    labels: list[bool] = []
+    undecided = 0
+    for s, a in scored:
+        j = a.correct if truth == "reference" else a.agreement
+        if j is None:
+            continue
+        if j.equivalent is None:
+            undecided += 1
+            continue
+        scores.append(s)
+        labels.append(bool(j.equivalent))
+    return scores, labels, truth, undecided, len(scored)
+
+
+def _cmd_calibrate(args: argparse.Namespace) -> int:
+    import random
+
+    from .audit import infer_tier_order
+
+    if args.max_knots < 2:
+        raise UsageError("--max-knots must be >= 2")
+    ledger_path = Path(args.ledger) if args.ledger else DEFAULT_LEDGER
+    with _open_ledger(ledger_path) as ledger:
+        run_id = _resolve_run(ledger, args.run_id, mode="eval")
+        decisions = list(ledger.decisions(run_id))
+        mode = next((r.mode for r in ledger.runs() if r.run_id == run_id), "n/a")
+        tiers, final = infer_tier_order(decisions)
+        tier = args.tier or (tiers[0] if tiers else None)
+        if tier is None or tier not in tiers:
+            raise UsageError(f"run {run_id} has no tier {tier!r} (tiers: {', '.join(tiers)})")
+        if tier == final or tier == tiers[-1]:
+            raise UsageError(
+                f"tier {tier!r} is the final tier of run {run_id}; it never escalates, so its "
+                f"confidence is unused (calibrate one of: {', '.join(tiers[:-1])})"
+            )
+        base_spec = _tier_confidence_spec(ledger, run_id, tier)
+    scores, labels, truth, undecided, n_scored = _calibration_pairs(decisions, tier, args.truth)
+    if len(scores) < _MIN_CALIBRATION_PAIRS:
+        what = "references" if truth == "reference" else "agreement with the final tier"
+        hint = (
+            "re-run the tasks with `shadowgate run ... --mode eval`, which runs every tier on "
+            "every task and records correctness (tasks with references) and agreement"
+        )
+        raise UsageError(
+            f"run {run_id} ({mode} mode) has {len(scores)} scored attempts of tier {tier!r} "
+            f"labelled by {what} (need >= {_MIN_CALIBRATION_PAIRS}); {hint}"
+        )
+    notes: list[str] = []
+    if mode == "serve" and truth == "audit-tier":
+        notes.append(
+            "labels come from sampled shadow audits of a serve-mode run, which are not a "
+            "uniform sample of scores; an eval-mode run gives an unbiased fit"
+        )
+    if undecided:
+        notes.append(f"{undecided} attempt(s) with an undecided judgement were left out")
+    if truth == "audit-tier":
+        notes.append("truth is agreement with the final tier, not correctness")
+
+    points = _fit_points(scores, labels, args.max_knots)
+    before = _cal_metrics(scores, labels)
+    after = _cal_metrics([_interp(points, s) for s in scores], labels)
+    # 2-fold cross-fitting: fit on one half, evaluate on the other, average the two halves.
+    idx = list(range(len(scores)))
+    random.Random(0).shuffle(idx)
+    halves = (idx[: len(idx) // 2], idx[len(idx) // 2 :])
+    cross: dict[str, list[float]] = {"ece": [], "brier": []}
+    for fit_i, eval_i in (halves, halves[::-1]):
+        pts = _fit_points([scores[i] for i in fit_i], [labels[i] for i in fit_i], args.max_knots)
+        m = _cal_metrics([_interp(pts, scores[i]) for i in eval_i], [labels[i] for i in eval_i])
+        for key in cross:
+            v = m[key]
+            if v is not None:
+                cross[key].append(v)
+    cross_fitted = {k: (sum(v) / len(v) if len(v) == 2 else None) for k, v in cross.items()}
+
+    points_toml = "[" + ", ".join(f"[{x!r}, {y!r}]" for x, y in points) + "]"
+    if base_spec is not None:
+        base_toml = _toml_value(dict(base_spec))
+        notes_snippet = ""
+    else:
+        base_toml = "<your current confidence spec>"
+        notes_snippet = (
+            "the run's stored config has no confidence spec for this tier; replace "
+            "<your current confidence spec> with the tier's current `confidence` table"
+        )
+        notes.append(notes_snippet)
+    snippet = (
+        f'[[tiers]]  # replace the confidence line of tier "{tier}" with:\n'
+        f'confidence = {{ type = "calibrated", base = {base_toml}, points = {points_toml} }}'
+    )
+    result = {
+        "run_id": run_id,
+        "mode": mode,
+        "tier": tier,
+        "truth": truth,
+        "n": len(scores),
+        "n_scored": n_scored,
+        "n_undecided": undecided,
+        "accuracy": sum(labels) / len(labels),
+        "mean_confidence": sum(scores) / len(scores),
+        "max_knots": args.max_knots,
+        "points": [list(p) for p in points],
+        "before": before,
+        "after": after,
+        "cross_fitted": cross_fitted,
+        "base_spec": dict(base_spec) if base_spec is not None else None,
+        "snippet": snippet,
+        "notes": notes,
+    }
+    if args.json:
+        _print_json(result)
+        return EXIT_OK
+    label = "correct" if truth == "reference" else "agreeing with the final tier"
+    _out(f"run {run_id} ({mode}), tier {tier!r}: {len(scores)} (confidence, {label}) pairs")
+    _out(
+        f"  mean confidence {_pct(result['mean_confidence'])}, "
+        f"observed {_pct(result['accuracy'])} {label}"
+    )
+    _out(f"  {'':<24} {'ECE':>7} {'Brier':>7}")
+    rows = (
+        ("before (raw scores)", before),
+        ("after, in-sample", after),
+        ("after, 2-fold cross-fit", cross_fitted),
+    )
+    for name, m in rows:
+        _out(f"  {name:<24} {_num(m['ece']):>7} {_num(m['brier']):>7}")
+    _out(f"  {len(points)} knots (max {args.max_knots}); in-sample numbers are optimistic,")
+    _out("  the cross-fitted ECE is the honest estimate for new data")
+    for n in notes:
+        _out("  note: " + n)
+    _out("")
+    _out(snippet)
+    _out("")
+    _out("Thresholds then apply to the calibrated scale; re-run in eval mode and sweep to pick")
+    _out("a new one.")
+    return EXIT_OK
+
+
 # --------------------------------------------------------------------------- report
 
 
@@ -943,6 +1257,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  shadowgate audit --tolerance 0.05 --fail-on-breach\n"
             "  shadowgate run -c shadowgate.toml -t tasks.jsonl --mode eval\n"
             "  shadowgate sweep --objective max-savings --max-drop 0.01\n"
+            "  shadowgate calibrate --tier fast              isotonic confidence map + snippet\n"
             "  shadowgate report -o report.html\n\n" + _exit_code_text() + "\n\n"
             "Set SHADOWGATE_DEBUG=1 to show tracebacks."
         ),
@@ -1074,6 +1389,30 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--budget", type=float, default=None, metavar="X", help="USD per task")
     p.add_argument("--holdout", type=float, default=0.3, metavar="F", help="held-out share (0.3)")
     p.add_argument("--seed", type=int, default=0, metavar="S", help="split seed (0)")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+
+    # calibrate
+    p = add(
+        "calibrate",
+        "fit an isotonic calibration map for a tier's confidence and print a config snippet",
+        "examples:\n"
+        "  shadowgate calibrate\n"
+        "  shadowgate calibrate --run-id nightly-eval --tier fast --max-knots 12\n"
+        "  shadowgate calibrate --truth audit-tier --json\n\n"
+        "Uses (confidence, correct) pairs of one non-final tier, from an eval-mode run (every\n"
+        "tier answers every task). Prints ECE/Brier before and after (in-sample and 2-fold\n"
+        'cross-fitted) and a `confidence = { type = "calibrated", ... }` line for the config.\n'
+        "truth: reference (vs task references), audit-tier (agreement with the final tier),\n"
+        "auto (reference when every scored attempt is graded).",
+        _cmd_calibrate,
+    )
+    ledger_opt(p)
+    run_id_opt(p, "the latest eval-mode run")
+    p.add_argument("--tier", metavar="NAME", default=None, help="tier to calibrate (first tier)")
+    p.add_argument(
+        "--truth", choices=("auto", "reference", "audit-tier"), default="auto", help="(auto)"
+    )
+    p.add_argument("--max-knots", type=int, default=20, metavar="K", help="knot limit (20)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
 
     # report

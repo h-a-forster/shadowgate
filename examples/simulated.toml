@@ -7,7 +7,7 @@
 # A simulated model answers task i correctly with probability sigmoid(skill - difficulty_i),
 # where difficulty comes from each task's meta.difficulty (the built-in arithmetic generator
 # uses roughly 2-16). Its verbal confidence tracks that probability plus `overconfidence`
-# and noise, so the fast tier below is a cheap, somewhat overconfident model.
+# and noise, so the fast tier below is a cheap, clearly overconfident model.
 
 [run]
 name = "simulated-demo"
@@ -18,21 +18,22 @@ cache = false
 
 [backends.fast]
 type = "simulated"
-skill = 8.0              # solves easy and medium problems, struggles with long ones
-overconfidence = 0.1     # reports ~0.1 more confidence than its accuracy warrants
-confidence_noise = 0.1
+skill = 8.5              # solves easy and medium problems, struggles with long ones
+overconfidence = 0.35    # reports ~0.35 more confidence than its accuracy warrants
+discrimination = 0.4     # right answers still score higher than wrong ones
+confidence_noise = 0.03
 pricing = { input = 0.10, output = 0.50 }      # USD per million tokens
 
 [backends.slow]
 type = "simulated"
-skill = 16.0             # much stronger, much more expensive
+skill = 24.0             # much stronger (near-perfect here), much more expensive
 overconfidence = 0.0
 pricing = { input = 4.00, output = 20.00 }
 
 [[tiers]]
 name = "fast"
 backend = "fast"
-threshold = 0.8
+threshold = 0.55                    # too permissive for this model: the audit shows it
 confidence = { type = "verbal" }    # the model ends with "CONFIDENCE: <0-1>"
 
 [[tiers]]
@@ -48,5 +49,5 @@ mode = "inline"
 rate = 0.2               # audit 20% of accepted cases outside the strata below
 floor = 0.05
 # [lo, hi, rate] on the fast tier's confidence: audit borderline acceptances more often.
-strata = [[0.8, 0.9, 0.5], [0.9, 1.0, 0.2]]
+strata = [[0.55, 0.9, 0.6], [0.9, 1.0, 0.3]]
 tolerance = 0.05         # acceptable disagreement rate on skipped cases

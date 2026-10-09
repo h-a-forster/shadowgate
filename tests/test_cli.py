@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import re
@@ -67,7 +68,8 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
 def test_help_lists_commands_and_exit_codes(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--help"]) == 0
     out = capsys.readouterr().out
-    for cmd in ("init", "demo", "run", "audit", "sweep", "report", "runs", "export", "datasets"):
+    commands = ("init", "demo", "run", "audit", "sweep", "calibrate", "report", "runs", "export")
+    for cmd in (*commands, "datasets"):
         assert cmd in out
     assert "exit codes" in out and "130" in out
 
@@ -342,7 +344,7 @@ def test_audit_json(workspace: dict[str, Path], capsys: pytest.CaptureFixture[st
 def test_audit_fail_on_breach(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # A permissive threshold keeps many wrong fast-tier answers: a clear breach.
     config = tmp_path / "loose.toml"
-    config.write_text(DEMO_CONFIG.replace("threshold = 0.8", "threshold = 0.3"), encoding="utf-8")
+    config.write_text(DEMO_CONFIG.replace("threshold = 0.55", "threshold = 0.3"), encoding="utf-8")
     tasks = tmp_path / "tasks.jsonl"
     save_tasks(arithmetic(60, seed=1), tasks)
     ledger = tmp_path / "ledger.sqlite"
@@ -449,6 +451,88 @@ def test_sweep_min_accuracy_needs_value(
     code = main(["sweep", "--ledger", str(workspace["ledger"]), "--objective", "min-accuracy"])
     assert code == 2
     assert "min_accuracy" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- calibrate
+
+
+def test_calibrate_text_defaults_to_latest_eval_run(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["calibrate", "--ledger", str(workspace["ledger"])]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("run e1 (eval), tier 'fast': 80 (confidence, correct) pairs")
+    assert "before (raw scores)" in out and "2-fold cross-fit" in out
+    assert '[[tiers]]  # replace the confidence line of tier "fast" with:' in out
+    assert 'base = { type = "verbal" }' in out
+
+
+def test_calibrate_json(workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(
+        ["calibrate", "--ledger", str(workspace["ledger"]), "--run-id", "e1", "--tier", "fast",
+         "--max-knots", "5", "--json"]
+    )  # fmt: skip
+    assert code == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["run_id"] == "e1" and data["tier"] == "fast" and data["truth"] == "reference"
+    assert data["n"] == N_TASKS and data["base_spec"] == {"type": "verbal"}
+    pts = data["points"]
+    assert 1 <= len(pts) <= 5
+    assert all(x1 > x0 and y1 >= y0 for (x0, y0), (x1, y1) in zip(pts, pts[1:], strict=False))
+    assert all(round(v, 4) == v for p in pts for v in p)
+    for key in ("before", "after", "cross_fitted"):
+        assert set(data[key]) == {"ece", "brier"}
+    # The isotonic map (even thinned) fits the sample at least as well as the raw scores.
+    assert data["after"]["ece"] <= data["before"]["ece"] + 1e-9
+
+
+def test_calibrate_snippet_round_trip(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from shadowgate.confidence import Calibrated
+
+    assert main(["calibrate", "--ledger", str(workspace["ledger"]), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    spec = tomllib.loads(data["snippet"])["tiers"][0]["confidence"]
+    assert spec["type"] == "calibrated" and spec["base"] == {"type": "verbal"}
+    assert [list(p) for p in spec["points"]] == data["points"]
+    # The snippet drops into the config and builds a working cascade.
+    raw = tomllib.loads(DEMO_CONFIG)
+    raw["tiers"][0]["confidence"] = spec
+    cascade, _ = parse_config(raw).build(tasks=arithmetic(5, seed=1))
+    est = cascade.tiers[0].estimator
+    assert isinstance(est, Calibrated)
+    assert [list(p) for p in est.points] == data["points"]
+
+
+def test_calibrate_bad_tier(workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]) -> None:
+    base = ["calibrate", "--ledger", str(workspace["ledger"])]
+    assert main([*base, "--tier", "nope"]) == 2
+    assert "no tier 'nope'" in capsys.readouterr().err
+    assert main([*base, "--tier", "slow"]) == 2
+    assert "final tier" in capsys.readouterr().err
+    assert main([*base, "--max-knots", "1"]) == 2
+    assert "--max-knots" in capsys.readouterr().err
+
+
+def test_calibrate_serve_run_without_labels(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # No references and no audits: a serve run has nothing to fit against.
+    config = tmp_path / "noaudit.toml"
+    config.write_text(DEMO_CONFIG.split("[audit]")[0], encoding="utf-8")
+    tasks = tmp_path / "tasks.jsonl"
+    save_tasks([dataclasses.replace(t, reference=None) for t in arithmetic(30, seed=1)], tasks)
+    ledger = tmp_path / "ledger.sqlite"
+    args = ["-c", str(config), "-t", str(tasks), "--ledger", str(ledger), "--run-id", "n1", "-q"]
+    assert main(["run", *args]) == 0
+    capsys.readouterr()
+    assert main(["calibrate", "--ledger", str(ledger), "--run-id", "n1"]) == 2
+    err = capsys.readouterr().err
+    assert "serve mode" in err and "--mode eval" in err
+    # Without --run-id the latest eval-mode run is required.
+    assert main(["calibrate", "--ledger", str(ledger)]) == 2
+    assert "no eval-mode run" in capsys.readouterr().err
 
 
 # --------------------------------------------------------------------------- report / export
