@@ -35,7 +35,7 @@ anthropic = ["anthropic>=0.70"]
 shadowgate = "shadowgate.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "anthropic>=0.70"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shadowgate"]

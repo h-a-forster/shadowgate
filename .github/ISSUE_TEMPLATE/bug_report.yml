@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in shadowgate behaves incorrectly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Do not paste API keys, and remove sensitive prompts or model
+        outputs from ledger or cache excerpts. For security issues, follow SECURITY.md instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: |
+        A minimal config, tasks file, or Python snippet. If possible, reproduce with the
+        `simulated` or `replay` backend so no provider access is needed.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: Full output. Set SHADOWGATE_DEBUG=1 to include tracebacks.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: shadowgate version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: "Python 3.12, Ubuntu 24.04"
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend(s) involved
+      multiple: true
+      options:
+        - anthropic
+        - openai (OpenAI-compatible)
+        - claude-code
+        - command
+        - simulated
+        - replay
+        - not backend-related
