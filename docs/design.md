@@ -99,9 +99,9 @@ def pricing_from_spec(spec: Mapping | None) -> Pricing | None   # {"input": .., 
 ## Backends
 
 All implement `types.Backend`: `name: str` and `complete(request) -> Completion`, thread-safe.
-Each backend's `complete` uses `call_with_retries` for transient failures, measures latency with
-`Timer`, computes `cost_usd` via `pricing.cost_of` (or the provider-reported cost when the provider
-returns one, e.g. the Claude Code CLI), and normalises `stop_reason` to
+Each backend's `complete` uses `call_with_retries` for transient failures, reports the latency
+of the final successful attempt (backoff sleeps and failed attempts excluded), computes `cost_usd`
+via `pricing.cost_of`, and normalises `stop_reason` to
 `"end" | "max_tokens" | "stop_sequence" | "refusal" | "error" | <raw>`.
 
 `make_backend(spec: Mapping, *, cache: CacheStore | None = None) -> Backend` builds one from a
@@ -126,11 +126,14 @@ When `cache` is given the result is wrapped in `CachedBackend`.
   `{base_url}/chat/completions`; api key optional (local servers). `want_logprobs` -> `logprobs:
   true` and parse `choices[0].logprobs.content[*].logprob`. Retry on 408/409/425/429/5xx,
   `URLError`, timeouts; honour `Retry-After`. Name: `openai:<model>` (or `name` override).
-* **ClaudeCodeBackend(model, *, executable="claude", timeout_s=600, retry, extra_args=())** - runs
-  `claude -p --output-format json --model <model>` with the prompt on stdin, in a fresh empty
-  temporary working directory so no project instructions leak in, with tools disabled where the
-  CLI supports it. Parses the JSON result: text, `usage`, `total_cost_usd` (provider-reported
-  cost), `is_error`. Name: `claude-code:<model>`.
+* **ClaudeCodeBackend(model, *, executable="claude", timeout_s=600, retry, extra_args=(),
+  pricing=None)** - runs `claude -p --output-format json --model <model>` with the prompt on
+  stdin, in a fresh empty temporary working directory so no project instructions leak in, with
+  tools, settings, MCP servers and session persistence disabled. On Windows `.cmd` shims no free
+  text goes on the command line (system prompt via `--system-prompt-file`). Timeouts kill the
+  whole process tree. Cost order: `pricing` override, then the price table (1-hour cache writes at
+  2x input), then the CLI's `total_cost_usd` only when the CLI recognised the model; otherwise
+  None. Name: `claude-code:<model>`.
 * **CommandBackend(command: list[str] | str, *, name, timeout_s, retry, pricing=None)** - prompt
   on stdin (system prompt, if any, prepended with a blank line), stdout is the text; non-zero exit
   is a BackendError (retryable if exit code in a configurable set). Usage estimated as

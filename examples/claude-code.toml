@@ -1,6 +1,7 @@
 # The same two-tier cascade, run through the Claude Code CLI (`claude -p`) instead of the
-# API. Uses the CLI's own login, so no API key is configured here; cost is the CLI-reported
-# total_cost_usd. Each call runs in a fresh empty directory with tools disabled.
+# API. Uses the CLI's own login, so no API key is configured here; cost is computed
+# from the price table (the CLI misprices some new models). Each call runs in a fresh empty
+# directory with tools, settings and MCP servers disabled.
 #
 # Use full model ids: a short alias such as "haiku" may resolve to an older model depending
 # on the CLI version.
