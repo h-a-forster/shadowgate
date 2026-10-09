@@ -1,0 +1,22 @@
+# Minimal two-tier cascade: a fast model answers first and reports its confidence; answers
+# below the threshold escalate to a stronger model. Needs ANTHROPIC_API_KEY in the environment
+# and the SDK extra: pip install "shadowgate[anthropic]".
+#
+#   shadowgate run -c examples/basic.toml -t examples/tasks/arithmetic-50.jsonl
+#   shadowgate audit
+
+[backends.fast]
+type = "anthropic"
+model = "claude-haiku-5-5"
+
+[backends.slow]
+type = "anthropic"
+model = "claude-opus-5-5"
+
+[[tiers]]
+backend = "fast"                     # tier name defaults to the backend id
+threshold = 0.8                      # serve when confidence >= 0.8, otherwise escalate
+confidence = { type = "verbal" }
+
+[[tiers]]
+backend = "slow"                     # final tier: always serves

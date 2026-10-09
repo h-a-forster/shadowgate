@@ -1,0 +1,52 @@
+# Fully offline cascade over simulated models: no network, no API keys, deterministic.
+# Used by `shadowgate demo` and the test suite. Try it with:
+#
+#   shadowgate run -c examples/simulated.toml -t examples/tasks/arithmetic-50.jsonl
+#   shadowgate audit
+#
+# A simulated model answers task i correctly with probability sigmoid(skill - difficulty_i),
+# where difficulty comes from each task's meta.difficulty (the built-in arithmetic generator
+# uses roughly 2-16). Its verbal confidence tracks that probability plus `overconfidence`
+# and noise, so the fast tier below is a cheap, somewhat overconfident model.
+
+[run]
+name = "simulated-demo"
+workers = 4
+seed = 0
+# Simulated calls are free and instant; caching them only costs disk space.
+cache = false
+
+[backends.fast]
+type = "simulated"
+skill = 8.0              # solves easy and medium problems, struggles with long ones
+overconfidence = 0.1     # reports ~0.1 more confidence than its accuracy warrants
+confidence_noise = 0.1
+pricing = { input = 0.10, output = 0.50 }      # USD per million tokens
+
+[backends.slow]
+type = "simulated"
+skill = 16.0             # much stronger, much more expensive
+overconfidence = 0.0
+pricing = { input = 4.00, output = 20.00 }
+
+[[tiers]]
+name = "fast"
+backend = "fast"
+threshold = 0.8
+confidence = { type = "verbal" }    # the model ends with "CONFIDENCE: <0-1>"
+
+[[tiers]]
+name = "slow"
+backend = "slow"                    # final tier: always serves, no threshold
+
+[answer]
+extractor = "final_line"            # text after the last "ANSWER:"
+comparator = { type = "numeric" }   # 1,000 == 1000.0
+
+[audit]
+mode = "inline"
+rate = 0.2               # audit 20% of accepted cases outside the strata below
+floor = 0.05
+# [lo, hi, rate] on the fast tier's confidence: audit borderline acceptances more often.
+strata = [[0.8, 0.9, 0.5], [0.9, 1.0, 0.2]]
+tolerance = 0.05         # acceptable disagreement rate on skipped cases

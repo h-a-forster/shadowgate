@@ -1,0 +1,48 @@
+# The same two-tier cascade, run through the Claude Code CLI (`claude -p`) instead of the
+# API. Uses the CLI's own login, so no API key is configured here; cost is the CLI-reported
+# total_cost_usd. Each call runs in a fresh empty directory with tools disabled.
+#
+# Use full model ids: a short alias such as "haiku" may resolve to an older model depending
+# on the CLI version.
+#
+#   shadowgate run -c examples/claude-code.toml -t examples/tasks/arithmetic-50.jsonl
+
+[run]
+name = "claude-code-haiku-opus"
+workers = 2              # each call starts a CLI process; keep concurrency modest
+max_cost_usd = 5.00
+cache = true
+
+[backends.fast]
+type = "claude-code"
+model = "claude-haiku-5-5"
+executable = "claude"    # or a full path to the CLI
+timeout_s = 300
+max_attempts = 3
+
+[backends.slow]
+type = "claude-code"
+model = "claude-opus-5-5"
+timeout_s = 900
+max_attempts = 3
+
+[[tiers]]
+name = "haiku"
+backend = "fast"
+effort = "low"           # passed to the CLI as --effort low
+threshold = 0.8
+confidence = { type = "verbal" }
+
+[[tiers]]
+name = "opus"
+backend = "slow"
+
+[answer]
+extractor = "final_line"
+comparator = { type = "numeric" }
+
+[audit]
+mode = "inline"
+rate = 0.1
+strata = [[0.8, 0.9, 0.3], [0.9, 1.0, 0.1]]
+tolerance = 0.05

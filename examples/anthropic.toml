@@ -1,0 +1,62 @@
+# Two-tier cascade on the Anthropic API with stratified shadow audits.
+#
+# Requirements: pip install "shadowgate[anthropic]" and an API key in ANTHROPIC_API_KEY
+# (keys are only ever read from the environment variable named by `api_key_env`).
+#
+#   shadowgate run -c examples/anthropic.toml -t examples/tasks/arithmetic-50.jsonl
+#   shadowgate audit --tolerance 0.05
+#   shadowgate report -o report.html
+
+[run]
+name = "anthropic-haiku-opus"
+workers = 4              # concurrent tasks in flight
+max_cost_usd = 5.00      # stop submitting new tasks once serving + audit spend reaches this
+cache = true             # reuse identical responses (.shadowgate/cache.sqlite next to the ledger)
+seed = 0
+# ledger = "runs/ledger.sqlite"   # default: .shadowgate/ledger.sqlite in the working directory
+
+[backends.fast]
+type = "anthropic"
+model = "claude-haiku-5-5"
+api_key_env = "ANTHROPIC_API_KEY"
+timeout_s = 120
+max_attempts = 5         # retries on rate limits, overload and timeouts
+
+[backends.slow]
+type = "anthropic"
+model = "claude-opus-5-5"
+api_key_env = "ANTHROPIC_API_KEY"
+timeout_s = 600
+max_attempts = 5
+
+[[tiers]]
+name = "haiku"
+backend = "fast"
+effort = "low"           # cheap, quick first pass
+max_tokens = 1024
+threshold = 0.8
+# The model ends its reply with "CONFIDENCE: <number between 0 and 1>".
+confidence = { type = "verbal" }
+# Alternative: a separate model grades the proposed answer (adds one call per task):
+# confidence = { type = "monitor", backend = "fast" }
+
+[[tiers]]
+name = "opus"
+backend = "slow"
+max_tokens = 4096        # final tier: always serves, so no threshold or confidence
+
+[answer]
+# Text after the last "ANSWER:" line; the default template asks every tier for one.
+extractor = "final_line"
+# Grades answers against task references and decides agreement between tiers.
+comparator = { type = "numeric", rel_tol = 1e-6 }
+
+[audit]
+mode = "inline"          # "inline" | "deferred" (shadowgate audit --run-pending) | "off"
+tier = "opus"            # reference tier for shadow audits (default: last tier)
+rate = 0.1               # inclusion probability for confidences outside the strata
+floor = 0.02             # never audit less often than this, so estimates stay unbiased
+# [lo, hi, rate] bands on the served confidence: borderline acceptances are audited more.
+strata = [[0.8, 0.9, 0.3], [0.9, 1.0, 0.1]]
+tolerance = 0.05         # acceptable disagreement rate on skipped (non-escalated) cases
+# judge = { type = "judge", backend = "slow" }   # model-graded agreement for free-text answers

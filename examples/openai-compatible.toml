@@ -1,0 +1,59 @@
+# Two local models behind an OpenAI-compatible endpoint (Ollama shown; vLLM, llama.cpp
+# server, LM Studio and hosted gateways such as OpenRouter work the same way), with
+# token-logprob confidence on the small model.
+#
+# Ollama: `ollama pull qwen3:4b && ollama pull qwen3:32b`, then `ollama serve`.
+# vLLM:   base_url = "http://localhost:8000/v1".
+# The logprob estimator needs a server that returns token logprobs (vLLM does; so do recent
+# Ollama releases). Otherwise switch the first tier to confidence = { type = "verbal" }.
+#
+#   shadowgate run -c examples/openai-compatible.toml -t examples/tasks/arithmetic-50.jsonl
+
+[run]
+name = "local-qwen"
+workers = 2              # local GPUs saturate quickly
+cache = true
+
+[backends.small]
+type = "openai"
+model = "qwen3:4b"
+base_url = "http://localhost:11434/v1"
+# Local servers usually need no key. Naming an unset variable means no Authorization header
+# is sent (the default, OPENAI_API_KEY, would forward that key to this endpoint).
+api_key_env = "OLLAMA_API_KEY"
+timeout_s = 300
+# Local inference has no per-token price; zero keeps cost totals defined. Put an amortised
+# hardware cost here to compare against hosted models.
+pricing = { input = 0.0, output = 0.0 }
+
+[backends.large]
+type = "openai"
+model = "qwen3:32b"
+base_url = "http://localhost:11434/v1"
+api_key_env = "OLLAMA_API_KEY"
+timeout_s = 900
+pricing = { input = 0.0, output = 0.0 }
+
+[[tiers]]
+name = "small"
+backend = "small"
+temperature = 0.0
+max_tokens = 1024
+threshold = 0.9
+# Mean token probability of the reply ("mean" | "min" | "geo_mean").
+confidence = { type = "logprob", aggregate = "geo_mean" }
+
+[[tiers]]
+name = "large"
+backend = "large"
+temperature = 0.0
+max_tokens = 4096
+
+[answer]
+extractor = "final_line"
+comparator = { type = "numeric" }
+
+[audit]
+mode = "deferred"        # queue audits; run them later with `shadowgate audit --run-pending`
+rate = 0.2
+tolerance = 0.05
