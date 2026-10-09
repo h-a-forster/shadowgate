@@ -134,7 +134,7 @@ STARTER_CONFIG = """\
 # To use real models, replace the two [backends.*] tables, for example:
 #
 #   [backends.fast]
-#   type = "anthropic"                 # pip install "shadowgate-llm[anthropic]"
+#   type = "anthropic"                 # pip install anthropic
 #   model = "claude-haiku-5-5"
 #   api_key_env = "ANTHROPIC_API_KEY"  # keys are read from the environment, never from here
 #

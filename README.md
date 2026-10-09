@@ -18,15 +18,12 @@ final tier, and reports the disagreement and error rate with confidence interval
 Python 3.11 or newer. No runtime dependencies.
 
 ```sh
-pip install shadowgate-llm
-pip install "shadowgate-llm[anthropic]"   # adds the official Anthropic SDK
-uv tool install shadowgate-llm            # CLI only, with uv
-uv add "shadowgate-llm[anthropic]"        # as a project dependency, with uv
+pip install git+https://github.com/h-a-forster/shadowgate
+uv tool install git+https://github.com/h-a-forster/shadowgate   # CLI only, with uv
+pip install anthropic   # only for the `anthropic` backend
 ```
 
-From source: `pip install git+https://github.com/h-a-forster/shadowgate`.
-
-The distribution is named `shadowgate-llm`; the import name and the CLI command are `shadowgate`.
+The import name and the CLI command are `shadowgate`. Not published on PyPI.
 
 ## Quickstart
 

@@ -252,7 +252,7 @@ def test_missing_sdk_raises_config_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.delitem(sys.modules, "anthropic", raising=False)
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    with pytest.raises(ConfigError, match=r"shadowgate-llm\[anthropic\]"):
+    with pytest.raises(ConfigError, match="pip install anthropic"):
         AnthropicBackend("claude-haiku-5-5")
 
 

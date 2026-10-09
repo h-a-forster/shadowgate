@@ -77,15 +77,8 @@ Each pluggable family is built by a factory function `from_spec(spec, **deps)` t
 
 ## Releasing
 
-One-time setup, done by a maintainer before the first release:
-
-- GitHub Pages: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
-- PyPI: add a trusted publisher (a pending publisher until the project exists) for the project
-  `shadowgate-llm`, this repository, workflow `release.yml` and environment `pypi`.
-- GitHub: create an environment named `pypi` (Settings -> Environments).
-
-To release, set `__version__` in `src/shadowgate/__init__.py`, move the "Unreleased" entries in
+Set `__version__` in `src/shadowgate/__init__.py`, move the "Unreleased" entries in
 `CHANGELOG.md` under the new version, then push a matching tag (`v0.1.0`). The release workflow
-runs the checks, builds, publishes to PyPI and creates the GitHub release.
+runs the checks, builds the wheel and sdist, and attaches them to a GitHub release.
 
 By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

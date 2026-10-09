@@ -20,7 +20,7 @@ from .openai_compat import parse_retry_after
 
 __all__ = ["AnthropicBackend", "INSTALL_HINT"]
 
-INSTALL_HINT = 'pip install "shadowgate-llm[anthropic]"'
+INSTALL_HINT = "pip install anthropic"
 _DEFAULT_KEY_ENV = "ANTHROPIC_API_KEY"
 _MAX_ERROR_CHARS = 500
 

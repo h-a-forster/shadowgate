@@ -1,6 +1,6 @@
 # Two-tier cascade on the Anthropic API with stratified shadow audits.
 #
-# Requirements: pip install "shadowgate-llm[anthropic]" and an API key in ANTHROPIC_API_KEY
+# Requirements: pip install anthropic, and an API key in ANTHROPIC_API_KEY
 # (keys are only ever read from the environment variable named by `api_key_env`).
 #
 #   shadowgate run -c examples/anthropic.toml -t examples/tasks/arithmetic-50.jsonl

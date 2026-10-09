@@ -65,7 +65,7 @@ src/shadowgate/
 
 Runtime dependencies: **none** (stdlib only, Python >= 3.11). The Anthropic backend imports the
 official `anthropic` SDK lazily and raises `ConfigError` with an install hint
-(`pip install "shadowgate-llm[anthropic]"`) if it is missing.
+(`pip install anthropic`) if it is missing.
 No numpy.
 
 ## Conventions

@@ -1,6 +1,6 @@
 # Minimal two-tier cascade: a fast model answers first and reports its confidence; answers
 # below the threshold escalate to a stronger model. Needs ANTHROPIC_API_KEY in the environment
-# and the SDK extra: pip install "shadowgate-llm[anthropic]".
+# and the SDK extra: pip install anthropic.
 #
 #   shadowgate run -c examples/basic.toml -t examples/tasks/arithmetic-50.jsonl
 #   shadowgate audit

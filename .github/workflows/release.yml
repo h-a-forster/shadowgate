@@ -1,13 +1,5 @@
 # Release workflow: runs when a tag matching v* is pushed (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
-#
-# One-time setup (required before the first release):
-#   1. On PyPI, add a trusted publisher for this project (for a project that does not exist on
-#      PyPI yet, add a "pending publisher" under Account settings -> Publishing). Enter the PyPI
-#      project name `shadowgate-llm`, the GitHub owner, the repository name, workflow filename
-#      `release.yml`, and environment name `pypi`.
-#   2. In this GitHub repository, create an environment named `pypi`
-#      (Settings -> Environments). Optionally add required reviewers and restrict it to `v*` tags.
-# No PyPI API token is stored anywhere: publishing uses OpenID Connect (`id-token: write`).
+# Runs the checks, builds the wheel and sdist, and attaches them to a GitHub release.
 
 name: Release
 
@@ -79,26 +71,9 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  publish-pypi:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: pypi
-      url: https://pypi.org/project/shadowgate-llm/
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
-
   github-release:
     name: Create GitHub release
-    needs: publish-pypi
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

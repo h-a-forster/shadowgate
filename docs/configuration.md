@@ -69,7 +69,7 @@ Keys shared by several types:
 
 ### `type = "anthropic"`
 
-Official Anthropic SDK. Install with `pip install "shadowgate-llm[anthropic]"`.
+Official Anthropic SDK. Install with `pip install anthropic`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|

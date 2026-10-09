@@ -7,11 +7,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
-
-- The distribution is published on PyPI as `shadowgate-llm` (the name `shadowgate` is taken).
-  The import name and the CLI command stay `shadowgate`.
-
 ## [0.1.0] - 2026-10-09
 
 Initial release.
@@ -41,7 +36,9 @@ Initial release.
   `export`, `import`, `datasets`. `--level` sets the interval confidence level for `audit`,
   `sweep` and `report`.
 - Results of a Claude Haiku 5.5 -> Opus 5.5 run on multi-step arithmetic, with committed decisions.
-- Stdlib-only runtime; Python 3.11+.
+- CI: lint, type-check, tests on Linux, Windows and macOS (Python 3.11 to 3.13), and a wheel
+  smoke test. Tagged releases attach the wheel and sdist to a GitHub release.
+- Stdlib-only runtime; Python 3.11+. Installed from GitHub; not published on PyPI.
 
 [Unreleased]: https://github.com/h-a-forster/shadowgate/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/h-a-forster/shadowgate/releases/tag/v0.1.0
