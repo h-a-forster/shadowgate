@@ -13,6 +13,10 @@ from shadowgate.svg import (
     Marker,
     RefLine,
     Series,
+    _clip_len,
+    _overlap,
+    _text_box,
+    _text_w,
     bar_with_ci,
     format_value,
     line_chart,
@@ -285,6 +289,41 @@ def test_legend_truncation_keeps_full_name() -> None:
     parse(line_chart([Series(long, [(0, 0), (1, 1)]), Series("b", [(0, 1)])], title="t", width=360))
 
 
+def text_box(t: ET.Element) -> tuple[float, float, float, float]:
+    """Approximate box of an unrotated <text> element (same metrics the renderer uses)."""
+    return _text_box(
+        float(t.get("x", "0")),
+        float(t.get("y", "0")),
+        "".join(t.itertext()),
+        t.get("text-anchor", "start"),
+        float(t.get("font-size", "11")),
+        t.get("font-weight") == "600",
+    )
+
+
+def text_el(root: ET.Element, label: str) -> ET.Element:
+    return next(t for t in root.iter(f"{NS}text") if "".join(t.itertext()) == label)
+
+
+def path_segments(d: str) -> list[tuple[float, float, float, float]]:
+    """Segments of an M/L/H/V path."""
+    import re
+
+    segs, cur = [], (0.0, 0.0)
+    for cmd, args in re.findall(r"([MLHV])([^MLHV]*)", d):
+        nums = [float(v) for v in args.split()]
+        if cmd == "M" or cmd == "L":
+            nxt = (nums[0], nums[1])
+        elif cmd == "H":
+            nxt = (nums[0], cur[1])
+        else:
+            nxt = (cur[0], nums[0])
+        if cmd != "M":
+            segs.append((*cur, *nxt))
+        cur = nxt
+    return segs
+
+
 def test_marker_label_nudge() -> None:
     svg = xy_chart(
         [],
@@ -294,9 +333,123 @@ def test_marker_label_nudge() -> None:
         y_range=(0, 2),
     )
     root = parse(svg)
-    ys = sorted(float(t.get("y", "0")) for t in root.iter(f"{NS}text") if "label" in (t.text or ""))
-    assert len(ys) == 5
-    assert all(b - a >= 12 for a, b in zip(ys, ys[1:], strict=False))
+    boxes = [text_box(t) for t in root.iter(f"{NS}text") if "label" in (t.text or "")]
+    assert len(boxes) == 5
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1 :]:
+            assert _overlap(a, b) == 0, (a, b)
+
+
+def test_diagonal_label_off_the_line() -> None:
+    bins = [(0.55, 0.5, 0.4, 0.6), (0.85, 0.83, 0.77, 0.88), (0.95, 0.97, 0.93, 0.99)]
+    for w, h in ((640, 360), (420, 300), (360, 360)):
+        svg = xy_chart(
+            [Series("observed", [(b[0], b[1]) for b in bins], show_points=True)],
+            title="Reliability",
+            x_range=(0, 1),
+            y_range=(0, 1),
+            y_format="percent",
+            error_bars=[ErrorBar(*b) for b in bins],
+            diagonal=Diagonal("perfect calibration"),
+            legend="none",
+            width=w,
+            height=h,
+        )
+        root = parse(svg)
+        line = next(e for e in root.iter(f"{NS}line") if e.get("stroke-opacity") == "0.45")
+        x0, y0, x1, y1 = (float(line.get(k, "0")) for k in ("x1", "y1", "x2", "y2"))
+        t = text_el(root, "perfect calibration")
+        tx, ty = float(t.get("x", "0")), float(t.get("y", "0"))
+        assert t.get("text-anchor") == "end"
+        ang = math.radians(float(t.get("transform", "").split("(")[1].split()[0]))
+        ux, uy = math.cos(ang), math.sin(ang)
+        assert abs(ux - (x1 - x0) / math.hypot(x1 - x0, y1 - y0)) < 1e-3  # along the line
+        nx, ny = -uy, ux
+        wdt = _text_w("perfect calibration", 10.5)
+        corners = [
+            (tx - a * ux + b * nx, ty - a * uy + b * ny) for a in (0, wdt) for b in (-8.6, 2.6)
+        ]
+        # signed distance of every glyph-box corner to the diagonal: same side, >= 3px away
+        dists = [((cx - x0) * nx + (cy - y0) * ny) for cx, cy in corners]
+        assert all(d >= 3 for d in dists) or all(d <= -3 for d in dists), dists
+        # and inside the plot area
+        assert all(x0 - 1 <= cx <= x1 + 1 and y1 - 1 <= cy <= y0 + 1 for cx, cy in corners)
+
+
+def bar_boxes(svg: str, ref: str) -> tuple[ET.Element, tuple, list[tuple]]:
+    root = parse(svg)
+    ref_box = text_box(text_el(root, ref))
+    anns = [text_box(t) for t in root.iter(f"{NS}text") if (t.text or "").startswith("n=")]
+    return root, ref_box, anns
+
+
+def test_bar_ref_label_avoids_annotations() -> None:
+    svg = bar_with_ci(
+        ["0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9", "0.9-1.0"],
+        [0.12, 0.08, None, 0.03, 0.01],
+        [0.05, 0.03, None, 0.01, 0.0],
+        [0.25, 0.15, None, 0.07, 0.03],
+        title="Disagreement by bin",
+        y_format="percent",
+        ref_line=RefLine("y", 0.05, "tolerance"),
+        annotations=["n=20", "n=31", "n=0", "n=60", "n=200"],
+    )
+    _, ref_box, anns = bar_boxes(svg, "tolerance")
+    assert len(anns) == 5
+    assert all(_overlap(ref_box, a) == 0 for a in anns)
+    # no free spot at all: every bar ends right at the tolerance line; annotations get nudged
+    svg = bar_with_ci(
+        ["a", "b", "c"],
+        [0.05, 0.05, 0.05],
+        title="crowded",
+        y_format="percent",
+        ref_line=RefLine("y", 0.05, "a rather long tolerance label"),
+        annotations=["n=1000", "n=2000", "n=3000"],
+        width=240,
+        height=200,
+    )
+    _, ref_box, anns = bar_boxes(svg, "a rather long tolerance label")
+    assert len(anns) == 3
+    assert all(_overlap(ref_box, a) == 0 for a in anns)
+
+
+def test_pareto_marker_labels_avoid_lines_and_each_other() -> None:
+    names = ("only:fast", "only:slow", "oracle", "recommended")
+    for kw in ({}, {"x_log": True, "width": 420, "height": 320}, {"x_log": True}):
+        svg = pareto_svg(**kw)
+        root = parse(svg)
+        boxes = {n: text_box(text_el(root, n)) for n in names}
+        frontier = next(p for p in root.iter(f"{NS}path") if "stroke-linejoin" in p.attrib).get(
+            "d", ""
+        )
+        segs = path_segments(frontier)
+        assert segs
+        for n, b in boxes.items():
+            assert sum(_clip_len(b, s) for s in segs) == 0, (kw, n)
+        vals = list(boxes.values())
+        for i, a in enumerate(vals):
+            for b in vals[i + 1 :]:
+                assert _overlap(a, b) == 0
+        # no leader lines when there is room next to each marker (the old "stray dash")
+        group = next(g for g in root.iter(f"{NS}g") if g.get("class") == "sg-markers")
+        assert not list(group.iter(f"{NS}line")), kw
+        for t in group.iter(f"{NS}text"):
+            assert "".join(t.itertext()) in names  # no dash glyphs in labels
+
+
+def test_risk_coverage_ref_label_avoids_step_line() -> None:
+    pts = [(i / 20, 0.02 + (i / 20) ** 2 * 0.2) for i in range(1, 21)]
+    svg = line_chart(
+        Series("risk", pts, kind="step"),
+        title="Risk-coverage",
+        y_format="percent",
+        ref_lines=[RefLine("y", 0.05, "tolerance 5%")],
+        legend="none",
+    )
+    root = parse(svg)
+    box = text_box(text_el(root, "tolerance 5%"))
+    path = next(p for p in root.iter(f"{NS}path") if "stroke-linejoin" in p.attrib)
+    assert sum(_clip_len(box, s) for s in path_segments(path.get("d", ""))) == 0
 
 
 def test_determinism() -> None:

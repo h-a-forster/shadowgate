@@ -496,6 +496,82 @@ def _thin(pts: list[tuple[float, float]], limit: int) -> list[tuple[float, float
     return [pts[round(i * (n - 1) / (limit - 1))] for i in range(limit)]
 
 
+# --------------------------------------------------------------------------- label geometry
+
+_Box = tuple[float, float, float, float]  # x0, y0, x1, y1 in pixels
+_Seg = tuple[float, float, float, float]  # x0, y0, x1, y1 in pixels
+
+
+def _text_w(s: str, size: float = 11, bold: bool = False) -> float:
+    return len(s) * _CHAR_W * size / 11 * (1.06 if bold else 1.0)
+
+
+def _text_box(
+    x: float, y: float, s: str, anchor: str = "start", size: float = 11, bold: bool = False
+) -> _Box:
+    """Approximate bounding box of an unrotated text element with baseline at ``y``."""
+    w = _text_w(s, size, bold)
+    x0 = x if anchor == "start" else x - w if anchor == "end" else x - w / 2
+    return (x0, y - 0.82 * size, x0 + w, y + 0.25 * size)
+
+
+def _overlap(a: _Box, b: _Box) -> float:
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    return w * h if w > 0 and h > 0 else 0.0
+
+
+def _outside(box: _Box, bounds: _Box) -> float:
+    return (box[2] - box[0]) * (box[3] - box[1]) - _overlap(box, bounds)
+
+
+def _clip_len(box: _Box, seg: _Seg) -> float:
+    """Length of the part of ``seg`` inside ``box`` (Liang-Barsky)."""
+    x0, y0, x1, y1 = seg
+    dx, dy = x1 - x0, y1 - y0
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x0 - box[0]), (dx, box[2] - x0), (-dy, y0 - box[1]), (dy, box[3] - y0)):
+        if p == 0:
+            if q < 0:
+                return 0.0
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return 0.0
+    return (t1 - t0) * math.hypot(dx, dy)
+
+
+@dataclass
+class _Obstacles:
+    """Things a label should avoid: boxes (labels, marker shapes, bars), line segments and
+    scatter points. :meth:`cost` scores a candidate label box (0 = free)."""
+
+    boxes: list[tuple[_Box, float]]
+    segs: list[_Seg]
+    pts: list[tuple[float, float]]
+
+    def cost(self, box: _Box) -> float:
+        c = sum(w * _overlap(box, b) for b, w in self.boxes)
+        x0, y0, x1, y1 = box[0] - 2, box[1] - 2, box[2] + 2, box[3] + 2
+        c += 25.0 * sum(_clip_len((x0, y0, x1, y1), s) for s in self.segs)
+        c += 3.0 * sum(1 for x, y in self.pts if x0 <= x <= x1 and y0 <= y <= y1)
+        return c
+
+
+def _best(cands: Sequence[tuple[float, _Box]], obs: _Obstacles, bounds: _Box) -> int:
+    """Index of the cheapest candidate (penalty, box); ties go to the earliest."""
+    best_i, best_c = 0, math.inf
+    for i, (pen, box) in enumerate(cands):
+        c = pen + obs.cost(box) + 200.0 * _outside(box, bounds)
+        if c < best_c - 1e-9:
+            best_i, best_c = i, c
+    return best_i
+
+
 # --------------------------------------------------------------------------- svg document
 
 
@@ -835,7 +911,40 @@ def xy_chart(
         f' width="{_f(px1 - px0 + 12)}" height="{_f(py1 - py0 + 12)}"/></clipPath>'
     )
 
+    # ---- obstacles for label placement (series lines, points, error bars, markers)
+    obs = _Obstacles([], [], [])
+    for s, kind, _, runs in prepared:
+        if kind == "scatter":
+            obs.pts.extend((sx(x), sy(y)) for r in runs for x, y in r)
+            continue
+        for run in runs:
+            prev = (sx(run[0][0]), sy(run[0][1]))
+            if s.show_points or len(run) == 1:
+                obs.pts.append(prev)
+            for x, y in run[1:]:
+                cur = (sx(x), sy(y))
+                if kind == "step":
+                    obs.segs.append((prev[0], prev[1], cur[0], prev[1]))
+                    obs.segs.append((cur[0], prev[1], cur[0], cur[1]))
+                else:
+                    obs.segs.append((prev[0], prev[1], cur[0], cur[1]))
+                if s.show_points:
+                    obs.pts.append(cur)
+                prev = cur
+    for _, x, y, lo, hi in eb:
+        if lo is not None and hi is not None:
+            a, b = sy(max(min(lo, hi), ylo)), sy(min(max(lo, hi), yhi))
+            obs.segs.append((sx(x), a, sx(x), b))
+        if y is not None:
+            obs.pts.append((sx(x), sy(y)))
+    for m, x, y in mk:
+        rr = _marker_extent(m)
+        cx, cy = sx(x), sy(y)
+        obs.boxes.append(((cx - rr, cy - rr, cx + rr, cy + rr), 50.0))
+    bounds = (px0 + 1, py0 - 2, px1 + 8, py1 - 1)
+
     # ---- reference lines and diagonal (beneath data)
+    ref_texts: list[str] = []
     for r in refs:
         v = float(r.value)
         key = _color_key(r.style, 0)
@@ -848,8 +957,12 @@ def xy_chart(
                 f'<line x1="{_f(px0)}" y1="{_f(yy)}" x2="{_f(px1)}" y2="{_f(yy)}"'
                 f' stroke-width="1.5" {_paint(stroke=key)}{dash}/>'
             )
-            if r.label:
-                body.append(_text(px1 - 4, yy - 5, r.label, anchor="end", halo=True, size=10.5))
+            opts = [
+                (px1 - 4, yy - 5, "end"),
+                (px0 + 4, yy - 5, "start"),
+                (px1 - 4, yy + 13, "end"),
+                (px0 + 4, yy + 13, "start"),
+            ]
         else:
             if not sx.contains(v):
                 continue
@@ -858,31 +971,46 @@ def xy_chart(
                 f'<line x1="{_f(xx)}" y1="{_f(py0)}" x2="{_f(xx)}" y2="{_f(py1)}"'
                 f' stroke-width="1.5" {_paint(stroke=key)}{dash}/>'
             )
-            if r.label:
-                anchor = "start" if xx < (px0 + px1) / 2 else "end"
-                dx = 5 if anchor == "start" else -5
-                body.append(_text(xx + dx, py0 + 12, r.label, anchor=anchor, halo=True, size=10.5))
+            near_left = xx < (px0 + px1) / 2
+            sides = [(xx + 5, "start"), (xx - 5, "end")]
+            if not near_left:
+                sides.reverse()
+            opts = [(x_, y_, a_) for y_ in (py0 + 12, py1 - 6) for x_, a_ in sides]
+        if r.label:
+            cands = [
+                (0.5 * i, _text_box(x_, y_, r.label, a_, 10.5))
+                for i, (x_, y_, a_) in enumerate(opts)
+            ]
+            i = _best(cands, obs, bounds)
+            x_, y_, a_ = opts[i]
+            ref_texts.append(_text(x_, y_, r.label, anchor=a_, halo=True, size=10.5))
+            obs.boxes.append((cands[i][1], 50.0))
     if diagonal is not None and not x_log:
         d0, d1 = max(xlo, ylo), min(xhi, yhi)
         if d1 > d0:
             dash = f' stroke-dasharray="{_DASH}"' if diagonal.dashed else ""
+            seg = (sx(d0), sy(d0), sx(d1), sy(d1))
             body.append(
-                f'<line x1="{_f(sx(d0))}" y1="{_f(sy(d0))}" x2="{_f(sx(d1))}" y2="{_f(sy(d1))}"'
+                f'<line x1="{_f(seg[0])}" y1="{_f(seg[1])}" x2="{_f(seg[2])}" y2="{_f(seg[3])}"'
                 f' stroke="currentColor" stroke-opacity="0.45" stroke-width="1.25"{dash}/>'
             )
             if diagonal.label:
-                lx, ly = sx(d1), sy(d1)
-                body.append(
+                lx, ly, ang, box = _diagonal_label(seg, diagonal.label, obs, bounds)
+                rot = f"rotate({_f(ang)} {_f(lx)} {_f(ly)})"
+                ref_texts.append(
                     _text(
-                        lx - 4,
-                        ly + 14,
+                        lx,
+                        ly,
                         diagonal.label,
                         anchor="end",
                         size=10.5,
                         halo=True,
-                        extra='fill-opacity="0.75"',
+                        extra=f'fill-opacity="0.75" transform="{rot}"',
                     )
                 )
+                obs.boxes.append((box, 50.0))
+            obs.segs.append(seg)
+    body.extend(ref_texts)  # above all reference lines, beneath the data
 
     # ---- series
     body.append('<g clip-path="url(#\x00CLIP\x00)">')
@@ -948,7 +1076,7 @@ def xy_chart(
 
     # ---- markers with nudged labels
     if mk:
-        body.extend(_draw_markers(mk, sx, sy, px0, px1, py0, py1))
+        body.extend(_draw_markers(mk, sx, sy, obs, bounds))
 
     # ---- legend
     if pos == "right":
@@ -961,17 +1089,96 @@ def xy_chart(
     return _svg(width, height, title, desc, body)
 
 
+_DIAG_ASC, _DIAG_DESC = 8.6, 2.6  # glyph extent above/below the baseline at 10.5px
+
+
+def _diagonal_label(
+    seg: _Seg, label: str, obs: _Obstacles, bounds: _Box
+) -> tuple[float, float, float, _Box]:
+    """Place the diagonal's label rotated along the line, offset to one side so it never
+    touches it. Returns (x, y, angle in degrees, axis-aligned bbox) for an end-anchored text."""
+    x0, y0, x1, y1 = seg
+    length = math.hypot(x1 - x0, y1 - y0)
+    ux, uy = (x1 - x0) / length, (y1 - y0) / length
+    nx, ny = -uy, ux  # unit normal; for a rising line this points down-right
+    ang = math.degrees(math.atan2(uy, ux))
+    w = _text_w(label, 10.5)
+    gap = 4.0
+
+    def frame(side: int, pad: float) -> tuple[float, float, list[tuple[float, float]]]:
+        # baseline distance from the line so the glyphs keep ``gap`` px clear of it
+        off = side * (gap + _DIAG_ASC) if side > 0 else side * (gap + _DIAG_DESC)
+        ex, ey = x1 - pad * ux + off * nx, y1 - pad * uy + off * ny
+        corners = [
+            (ex - a * ux + b * nx, ey - a * uy + b * ny)
+            for a in (0.0, w)
+            for b in (-_DIAG_ASC, _DIAG_DESC)
+        ]
+        return ex, ey, corners
+
+    def local_cost(ex: float, ey: float) -> float:
+        # obstacles in the label's own (along-line, normal) frame, where it is axis-aligned
+        def to_local(px: float, py: float) -> tuple[float, float]:
+            dx, dy = px - ex, py - ey
+            return -(dx * ux + dy * uy), dx * nx + dy * ny
+
+        box = (-3.0, -_DIAG_ASC - 3.0, w + 3.0, _DIAG_DESC + 3.0)  # with clearance
+        c = 0.0
+        for s in obs.segs:
+            a, b = to_local(s[0], s[1]), to_local(s[2], s[3])
+            c += 25.0 * _clip_len(box, (a[0], a[1], b[0], b[1]))
+        for p in obs.pts:
+            lx, ly = to_local(*p)
+            if -2 <= lx <= w + 2 and -_DIAG_ASC - 2 <= ly <= _DIAG_DESC + 2:
+                c += 3.0
+        return c
+
+    best: tuple[float, float, float, list[tuple[float, float]]] | None = None
+    for side in (1, -1):  # below-right of the line first, then above-left
+        pad = 6.0
+        while pad + w <= length or pad == 6.0:
+            ex, ey, corners = frame(side, pad)
+            bb = (
+                min(p[0] for p in corners),
+                min(p[1] for p in corners),
+                max(p[0] for p in corners),
+                max(p[1] for p in corners),
+            )
+            out = sum(
+                max(0.0, bounds[0] - px, px - bounds[2], bounds[1] - py, py - bounds[3])
+                for px, py in corners
+            )
+            c = 400.0 * out + local_cost(ex, ey) + sum(wt * _overlap(bb, b) for b, wt in obs.boxes)
+            c += 0.05 * pad + (0 if side > 0 else 2.0)
+            if best is None or c < best[0] - 1e-9:
+                best = (c, ex, ey, corners)
+            pad += 4.0
+    assert best is not None
+    _, ex, ey, corners = best
+    bb = (
+        min(p[0] for p in corners),
+        min(p[1] for p in corners),
+        max(p[0] for p in corners),
+        max(p[1] for p in corners),
+    )
+    return ex, ey, ang, bb
+
+
+def _marker_extent(m: Marker) -> float:
+    """Half-size of a marker's drawn footprint (shape plus emphasis ring)."""
+    r = 6.5 if m.emphasis else 5.0
+    return r + 6.0 if m.emphasis else r * 1.45 + 1.0
+
+
 def _draw_markers(
     mk: Sequence[tuple[Marker, float, float]],
     sx: _Scale,
     sy: _Scale,
-    px0: float,
-    px1: float,
-    py0: float,
-    py1: float,
+    obs: _Obstacles,
+    bounds: _Box,
 ) -> list[str]:
     out = ['<g class="sg-markers">']
-    labels: list[tuple[float, float, str, str, bool]] = []  # px, py, text, anchor, bold
+    labels: list[tuple[float, float, float, str, bool]] = []  # px, py, extent, text, bold
     shapes: list[str] = []
     for m, x, y in mk:
         if not (sx.contains(x) and sy.contains(y)):
@@ -996,47 +1203,49 @@ def _draw_markers(
             )
         shapes.append(f"<g>{title}{ring}{_shape(m.shape, cx, cy, r, paint)}</g>")
         if m.label:
-            labels.append((cx, cy, m.label, "start", m.emphasis))
+            labels.append((cx, cy, _marker_extent(m), m.label, m.emphasis))
     out.extend(shapes)
 
-    # simple vertical nudge to avoid overlapping labels
-    placed: list[tuple[float, float, float, float]] = []
+    # try positions around each marker (right, left, above, below, diagonals, then rows
+    # stacked further away with a leader line) and keep the one with the least overlap
+    # against already placed labels, markers, series lines and points; deterministic
     line_h = 13.0
-    for cx, cy, text, _, bold in sorted(labels, key=lambda t: (t[1], t[0])):
-        w = len(text) * _CHAR_W * (1.06 if bold else 1.0)
-        if cx + 10 + w <= px1 + 8:
-            anchor, x0 = "start", cx + 10
-        else:
-            anchor, x0 = "end", cx - 10 - w
-        bx0, bx1 = (x0, x0 + w)
-        ty = cy + 4
-
-        def hits(yb: float, a: float = bx0, b: float = bx1) -> bool:
-            return any(
-                a < q1 and b > q0 and yb - line_h + 2 < r1 and yb + 2 > r0
-                for q0, q1, r0, r1 in placed
-            )
-
-        tries = 0
-        cand = ty
-        while hits(cand) and tries < 12:
-            cand += line_h
-            tries += 1
-        if hits(cand) or cand > py1 + 4:
-            cand, tries = ty, 0
-            while hits(cand) and tries < 12:
-                cand -= line_h
-                tries += 1
-        cand = min(max(cand, py0 + 10), py1 + 4)
-        placed.append((bx0, bx1, cand - line_h + 2, cand + 2))
-        lx = bx0 if anchor == "start" else bx1
-        if abs(cand - ty) > 6:
-            ex = lx - 2 if anchor == "start" else lx + 2
-            out.append(
-                f'<line x1="{_f(cx)}" y1="{_f(cy)}" x2="{_f(ex)}"'
-                f' y2="{_f(cand - 4)}" stroke="currentColor" stroke-opacity="0.4"/>'
-            )
-        out.append(_text(lx, cand, text, anchor=anchor, bold=bold, halo=True))
+    for cx, cy, rr, text, bold in sorted(labels, key=lambda t: (t[1], t[0])):
+        g = rr + 3.0
+        d = rr * 0.72 + 2.0
+        opts: list[tuple[float, float, float, str, bool]] = [  # penalty, x, y, anchor, leader
+            (0.0, cx + g, cy + 4, "start", False),
+            (1.0, cx - g, cy + 4, "end", False),
+            (2.0, cx, cy - rr - 5, "middle", False),
+            (3.0, cx, cy + rr + 11, "middle", False),
+            (4.0, cx + d, cy - d - 3, "start", False),
+            (4.5, cx + d, cy + d + 9, "start", False),
+            (5.0, cx - d, cy - d - 3, "end", False),
+            (5.5, cx - d, cy + d + 9, "end", False),
+        ]
+        for k in range(1, 7):
+            for sgn in (1, -1):
+                for dx, anchor in ((g, "start"), (-g, "end")):
+                    pen = 14.0 * k + (0.5 if sgn < 0 else 0) + (0.25 if dx < 0 else 0)
+                    opts.append((pen, cx + dx, cy + 4 + sgn * k * line_h, anchor, True))
+        cands = [(p, _text_box(x, y, text, a, bold=bold)) for p, x, y, a, _ in opts]
+        i = _best(cands, obs, bounds)
+        _, lx, ly, anchor, leader = opts[i]
+        box = cands[i][1]
+        obs.boxes.append((box, 50.0))
+        if leader:
+            # from the marker's edge to the nearest point of the label box
+            tx = min(max(cx, box[0] - 2), box[2] + 2)
+            ty = min(max(cy, box[1]), box[3])
+            dist = math.hypot(tx - cx, ty - cy)
+            if dist > rr + 2:
+                sx0 = cx + (tx - cx) * (rr + 1) / dist
+                sy0 = cy + (ty - cy) * (rr + 1) / dist
+                out.append(
+                    f'<line x1="{_f(sx0)}" y1="{_f(sy0)}" x2="{_f(tx)}" y2="{_f(ty)}"'
+                    f' stroke="currentColor" stroke-opacity="0.4"/>'
+                )
+        out.append(_text(lx, ly, text, anchor=anchor, bold=bold, halo=True))
     out.append("</g>")
     return out
 
@@ -1143,6 +1352,76 @@ def bar_with_ci(
     base = sy(clamp(0.0))
     label_stride = 1 if band >= 28 else math.ceil(28 / band)
     max_chars = max(3, int(band * label_stride / _CHAR_W) - 1)
+
+    # ---- geometry pass: bars, whiskers, annotations; then reference-line labels in a free
+    # spot; annotations that still collide with a reference label are nudged clear of it
+    obs = _Obstacles([], [], [])
+    ann_pos: list[tuple[float, float] | None] = []
+    for i in range(n):
+        cx = px0 + band * (i + 0.5)
+        v, lo, hi = vals[i], los[i], his[i]
+        top_y = base
+        if v is not None:
+            vy = sy(clamp(v))
+            obs.boxes.append(((cx - bw / 2, min(vy, base), cx + bw / 2, max(vy, base)), 20.0))
+            top_y = min(top_y, vy)
+        if lo is not None and hi is not None:
+            a, b = sy(clamp(min(lo, hi))), sy(clamp(max(lo, hi)))
+            cap = min(bw * 0.3, 8)
+            obs.boxes.append(((cx - cap, b - 1, cx + cap, a + 1), 20.0))
+            top_y = min(top_y, b)
+        if annotations is not None and annotations[i]:
+            ann_pos.append((cx, top_y - 5))
+            obs.boxes.append((_text_box(cx, top_y - 5, str(annotations[i]), "middle", 10), 50.0))
+        else:
+            ann_pos.append(None)
+    bounds = (px0 + 1, 2.0, px1, py1 - 1)
+    ref_draw: list[tuple[RefLine, float, str, str, float, float, str]] = []
+    ref_boxes: list[_Box] = []
+    for r in refs:
+        v = float(r.value)
+        if not sy.contains(v):
+            continue
+        yy = sy(v)
+        key = _color_key(r.style, 0)
+        dash = f' stroke-dasharray="{_DASH}"' if r.dashed else ""
+        lx, ly, anchor = px1 - 4, yy - 5, "end"
+        if r.label:
+            opts = [
+                (px1 - 4, yy - 5, "end"),
+                (px0 + 4, yy - 5, "start"),
+                (px1 - 4, yy + 13, "end"),
+                (px0 + 4, yy + 13, "start"),
+            ]
+            for i in range(n - 1, -1, -1):  # band centres, right to left
+                cx = px0 + band * (i + 0.5)
+                opts += [(cx, yy - 5, "middle"), (cx, yy + 13, "middle")]
+            cands = [
+                (0.5 * j, _text_box(x_, y_, r.label, a_, 10.5))
+                for j, (x_, y_, a_) in enumerate(opts)
+            ]
+            j = _best(cands, obs, bounds)
+            lx, ly, anchor = opts[j]
+            ref_boxes.append(cands[j][1])
+            obs.boxes.append((cands[j][1], 50.0))
+        ref_draw.append((r, yy, key, dash, lx, ly, anchor))
+    if annotations is not None:
+        for i, pos in enumerate(ann_pos):
+            if pos is None:
+                continue
+            cx, ay = pos
+            text = str(annotations[i])
+            for _ in range(len(ref_boxes) + 1):
+                hit = next(
+                    (b for b in ref_boxes if _overlap(_text_box(cx, ay, text, "middle", 10), b)),
+                    None,
+                )
+                if hit is None:
+                    break
+                up = hit[1] - 1 - 0.25 * 10
+                ay = up if up - 0.82 * 10 >= 2 else hit[3] + 1 + 0.82 * 10
+            ann_pos[i] = (cx, ay)
+
     body.append('<g class="sg-bars">')
     for i, cat in enumerate(categories):
         cx = px0 + band * (i + 0.5)
@@ -1156,7 +1435,6 @@ def bar_with_ci(
         if annotations is not None and annotations[i]:
             tip.append(str(annotations[i]))
         body.append(f"<g><title>{_esc(' '.join(tip))}</title>")
-        top_y = base
         if v is not None:
             vy = sy(clamp(v))
             y0, h = min(vy, base), abs(base - vy)
@@ -1164,7 +1442,6 @@ def bar_with_ci(
                 f'<rect x="{_f(cx - bw / 2)}" y="{_f(y0)}" width="{_f(bw)}" height="{_f(h)}"'
                 f' rx="2" {_paint(fill=key)}/>'
             )
-            top_y = min(top_y, vy)
         if lo is not None and hi is not None:
             a, b = sy(clamp(min(lo, hi))), sy(clamp(max(lo, hi)))
             cap = min(bw * 0.3, 8)
@@ -1173,12 +1450,12 @@ def bar_with_ci(
                 f'M{_f(cx - cap)} {_f(b)}H{_f(cx + cap)}" fill="none" stroke="currentColor"'
                 f' stroke-width="1.5" stroke-opacity="0.85"/>'
             )
-            top_y = min(top_y, b)
-        if annotations is not None and annotations[i]:
+        pos = ann_pos[i]
+        if annotations is not None and annotations[i] and pos is not None:
             body.append(
                 _text(
                     cx,
-                    top_y - 5,
+                    pos[1],
                     str(annotations[i]),
                     anchor="middle",
                     size=10,
@@ -1202,19 +1479,13 @@ def bar_with_ci(
             f'<line x1="{_f(px0)}" y1="{_f(base)}" x2="{_f(px1)}" y2="{_f(base)}"'
             f' stroke="currentColor" stroke-opacity="0.55"/>'
         )
-    for r in refs:
-        v = float(r.value)
-        if not sy.contains(v):
-            continue
-        yy = sy(v)
-        key = _color_key(r.style, 0)
-        dash = f' stroke-dasharray="{_DASH}"' if r.dashed else ""
+    for r, yy, key, dash, lx, ly, anchor in ref_draw:
         body.append(
             f'<line x1="{_f(px0)}" y1="{_f(yy)}" x2="{_f(px1)}" y2="{_f(yy)}" stroke-width="1.5"'
             f" {_paint(stroke=key)}{dash}/>"
         )
         if r.label:
-            body.append(_text(px1 - 4, yy - 5, r.label, anchor="end", halo=True, size=10.5))
+            body.append(_text(lx, ly, r.label, anchor=anchor, halo=True, size=10.5))
     if x_label:
         body.append(_text((px0 + px1) / 2, py1 + 36, x_label, anchor="middle", size=12))
     if y_label:
