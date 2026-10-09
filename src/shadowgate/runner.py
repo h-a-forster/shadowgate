@@ -111,7 +111,7 @@ class RunStats:
         if self.unknown_cost:
             parts.append(f"{self.unknown_cost} unknown cost")
         parts.append(f"{self.elapsed_s:.1f}s")
-        line = " · ".join(parts)
+        line = " | ".join(parts)
         if self.stopped:
             line += f" (stopped: {self.stopped})"
         return line

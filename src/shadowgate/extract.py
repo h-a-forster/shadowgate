@@ -60,10 +60,13 @@ _SIMPLE_FRAC_RE = re.compile(r"\\[dt]?frac\s*\{\s*([^{}]+?)\s*\}\s*\{\s*([^{}]+?
 _FRAC_REPL = r"\g<1>/\g<2>"
 
 # A line that only reports confidence: "CONFIDENCE: 0.8", "**Confidence:** 80%",
-# "- Confidence level: high", "My confidence: 0.9", "Confidence 0.8".
+# "- Confidence level: high", "My confidence: 0.9", "Confidence 0.8",
+# "Confidence - 0.8" (hyphen, en dash or em dash).
 _CONF_LINE_RE = re.compile(
     r"^[\s>#*_\-`]*(?:(?:my|final|overall|estimated|self[- ]reported)\s+){0,2}"
-    r"(?:confidence|conf\.?)\b(?:[^:=\n]{0,25}[:=]|[\s*_]*(?:level|score)?\s*(?:of\s+)?[\d.])",
+    r"(?:confidence|conf\.?)\b(?:[^:=\n]{0,25}[:=]|[\s*_]*(?:level|score)?\s*(?:of\s+)?[\d.]"
+    # dash separators: "Confidence - 0.85", "Confidence – 85%", "**Confidence** — high"
+    r"|[\s*_]*(?:(?:level|score)[\s*_]*)?[-–—][\s*_]*(?:[\d.]|(?:high|medium|low)\b))",
     re.IGNORECASE,
 )
 # A trailing confidence segment on an answer line. It must end the line and carry exactly one
@@ -75,7 +78,7 @@ _CONF_VALUE = r"(?:(?:\d+(?:\.\d*)?|\.\d+)\s*%?(?:\s*/\s*\d+(?:\.\d+)?)?|high|me
 _CONF_INLINE_RE = re.compile(
     # "<sep> confidence[ level|score][:=-] <value>"
     r"(?:\s*[,;|]\s*|\s+[-–—]\s+|\s*[(\[]\s*|\s+)[*_]*(?:confidence|conf\.?)(?:\s+(?:level|score))?"
-    rf"[*_]*\s*(?:[:=\-]\s*|of\s+)?[*_]*{_CONF_VALUE}[*_]*\s*[)\]]?"
+    rf"[*_]*\s*(?:[:=\-–—]\s*|of\s+)?[*_]*{_CONF_VALUE}[*_]*\s*[)\]]?"
     r"[\s.]*$"
     # "with [a] <value> confidence|certainty"
     r"|\s*[(\[]?\s*\bwith\s+(?:a\s+)?(?:\d+(?:\.\d+)?\s*%?)\s+(?:confidence|certainty)\b"

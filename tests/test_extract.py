@@ -300,6 +300,12 @@ def test_strip_markup(text: str, expected: str) -> None:
         ("Confidence 0.8", True),
         ("ANSWER: 42", False),
         ("Confidence intervals are useful", False),
+        ("Confidence - 0.85", True),
+        ("Confidence-0.85", True),
+        ("Confidence – 85%", True),
+        ("**Confidence** — high", True),
+        ("Confidence level - .9", True),
+        ("Confidence - this one is tricky", False),
     ],
 )
 def test_is_confidence_line(line: str, expected: bool) -> None:
@@ -401,3 +407,19 @@ def test_final_line_inline_confidence(text: str, expected: str) -> None:
 )
 def test_last_number_inline_confidence(text: str, expected: str) -> None:
     assert LastNumber().extract(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ANSWER: 42\nConfidence - 0.85",
+        "ANSWER: 42\nConfidence-0.85",
+        "ANSWER: 42\nConfidence – 85%",
+        "ANSWER: 42\nConfidence — 0.85",
+        "ANSWER: 42 confidence – 0.9",
+    ],
+)
+def test_dash_separated_confidence_is_ignored(text: str) -> None:
+    # FinalLine and LastNumber agree: the dash-separated confidence value is not the answer.
+    assert LastNumber().extract(text) == "42"
+    assert FinalLine().extract(text) == "42"

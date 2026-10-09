@@ -501,7 +501,7 @@ def test_summary_line_format() -> None:
         elapsed_s=41.23,
     )
     assert s.summary_line() == (
-        "120/120 done · 37 escalated · 12 audited · $0.4312 serving + $0.0911 audit · 41.2s"
+        "120/120 done | 37 escalated | 12 audited | $0.4312 serving + $0.0911 audit | 41.2s"
     )
     s2 = RunStats(run_id="r", completed=3, total=10, failed=1, unknown_cost=2, stopped="budget")
     line = s2.summary_line()

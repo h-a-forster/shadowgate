@@ -340,11 +340,13 @@ def _run_tolerance(ledger: Ledger, run_id: str) -> float | None:
     return None
 
 
-def _summarize(decisions: Sequence[Decision], tolerance: float | None) -> AuditSummary:
+def _summarize(
+    decisions: Sequence[Decision], tolerance: float | None, level: float = 0.95
+) -> AuditSummary:
     from .audit import summarize
 
     try:
-        return summarize(decisions, tolerance=tolerance)
+        return summarize(decisions, tolerance=tolerance, level=level)
     except ValueError as exc:
         raise UsageError(str(exc)) from exc
 
@@ -595,6 +597,8 @@ def _print_demo_summary(summary: AuditSummary, sw: SweepResult, threshold: float
         status += f" (tolerance {_pct(summary.tolerance)}"
         if summary.audits_to_resolve:
             status += f"; ~{summary.audits_to_resolve} more audits to resolve"
+        elif summary.tasks_to_resolve:
+            status += f"; ~{summary.tasks_to_resolve} more skipped tasks to resolve"
         status += ")"
     _out(f"  audit status            {status}")
     _out("")
@@ -724,7 +728,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     with _open_ledger(ledger_path) as ledger:
         run_id = _resolve_run(ledger, args.run_id)
         tolerance = args.tolerance if args.tolerance is not None else _run_tolerance(ledger, run_id)
-        summary = _summarize(list(ledger.decisions(run_id)), tolerance)
+        summary = _summarize(list(ledger.decisions(run_id)), tolerance, args.level)
     return _emit_audit(args, summary)
 
 
@@ -773,7 +777,7 @@ def _audit_run_pending(args: argparse.Namespace) -> int:
             tolerance = settings.tolerance
         if tolerance is None:
             tolerance = _run_tolerance(ledger, run_id)
-        summary = _summarize(list(ledger.decisions(run_id)), tolerance)
+        summary = _summarize(list(ledger.decisions(run_id)), tolerance, args.level)
     code = _emit_audit(args, summary)
     if stats.stopped:
         return _stop_exit_code(stats.stopped)
@@ -791,6 +795,7 @@ def _sweep_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "budget_per_task": args.budget,
         "holdout": args.holdout,
         "seed": args.seed,
+        "level": args.level,
     }
 
 
@@ -1134,7 +1139,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
         run_id = _resolve_run(ledger, args.run_id)
         decisions = list(ledger.decisions(run_id))
         tolerance = args.tolerance if args.tolerance is not None else _run_tolerance(ledger, run_id)
-        summary = _summarize(decisions, tolerance)
+        summary = _summarize(decisions, tolerance, args.level)
         sweep_id = args.sweep_run_id
         if sweep_id is None and summary.mode == "eval":
             sweep_id = run_id
@@ -1143,7 +1148,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
             sweep_id = _resolve_run(ledger, sweep_id)
             sweep_decisions = decisions if sweep_id == run_id else list(ledger.decisions(sweep_id))
             try:
-                sw = _sweep(sweep_decisions)
+                sw = _sweep(sweep_decisions, level=args.level)
             except InsufficientData as exc:
                 if args.sweep_run_id is not None:
                     raise
@@ -1183,6 +1188,38 @@ def _cmd_export(args: argparse.Namespace) -> int:
         run_id = _resolve_run(ledger, args.run_id)
         n = ledger.export_jsonl(args.output, run_id)
     _out(f"wrote {n} decisions of run {run_id} to {args.output}")
+    return EXIT_OK
+
+
+def _jsonl_run_ids(path: Path) -> list[str]:
+    """Run ids named in a JSONL decision file, in first-seen order (unparsable lines skipped)."""
+    seen: dict[str, None] = {}
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            with contextlib.suppress(ValueError):
+                obj = json.loads(line)
+                if isinstance(obj, dict) and isinstance(obj.get("run_id"), str):
+                    seen.setdefault(obj["run_id"], None)
+    return list(seen)
+
+
+def _cmd_import(args: argparse.Namespace) -> int:
+    files = [Path(f) for f in args.files]
+    missing = [str(f) for f in files if not f.is_file()]
+    if missing:
+        raise UsageError(f"no such file: {', '.join(missing)}")
+    ledger_path = Path(args.ledger) if args.ledger else DEFAULT_LEDGER
+    total = 0
+    run_ids: dict[str, None] = {}
+    with _open_ledger(ledger_path, create=True) as ledger:
+        for f in files:
+            total += ledger.import_jsonl(f)
+            for rid in _jsonl_run_ids(f):
+                run_ids.setdefault(rid, None)
+    runs = ", ".join(run_ids) or "none"
+    _out(f"imported {total} decisions (runs: {runs}) into {ledger_path}")
     return EXIT_OK
 
 
@@ -1231,6 +1268,22 @@ def _cmd_datasets_show(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- parser
 
 
+def _level(text: str) -> float:
+    try:
+        v = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid level {text!r} (a number in (0.5, 1))") from None
+    if not (0.5 < v < 1.0):
+        raise argparse.ArgumentTypeError(f"level must be in (0.5, 1), got {text}")
+    return v
+
+
+_LEVEL_HELP = (
+    "confidence level of the intervals (0.95); the status uses fixed-sample intervals, "
+    "so use a stricter level (e.g. 0.99) when the same run is checked repeatedly"
+)
+
+
 class _Formatter(argparse.RawDescriptionHelpFormatter):
     def __init__(self, prog: str) -> None:
         super().__init__(prog, max_help_position=30)
@@ -1258,7 +1311,10 @@ def build_parser() -> argparse.ArgumentParser:
             "  shadowgate run -c shadowgate.toml -t tasks.jsonl --mode eval\n"
             "  shadowgate sweep --objective max-savings --max-drop 0.01\n"
             "  shadowgate calibrate --tier fast              isotonic confidence map + snippet\n"
-            "  shadowgate report -o report.html\n\n" + _exit_code_text() + "\n\n"
+            "  shadowgate report -o report.html\n"
+            "  shadowgate import run.jsonl --ledger other.sqlite   load an exported run\n\n"
+            + _exit_code_text()
+            + "\n\n"
             "Set SHADOWGATE_DEBUG=1 to show tracebacks."
         ),
     )
@@ -1280,6 +1336,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--ledger", metavar="PATH", default=None, help=f"ledger file (default: {default})"
         )
+
+    def level_opt(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--level", type=_level, default=0.95, metavar="L", help=_LEVEL_HELP)
 
     def run_id_opt(p: argparse.ArgumentParser, what: str = "the latest run") -> None:
         p.add_argument("--run-id", metavar="ID", default=None, help=f"run to use (default: {what})")
@@ -1355,6 +1414,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="T",
         help="acceptable skipped-case error/disagreement (default: audit.tolerance of the run)",
     )
+    level_opt(p)
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("--fail-on-breach", action="store_true", help="exit 3 if status is breach")
     p.add_argument("--run-pending", action="store_true", help="first run pending deferred audits")
@@ -1389,6 +1449,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--budget", type=float, default=None, metavar="X", help="USD per task")
     p.add_argument("--holdout", type=float, default=0.3, metavar="F", help="held-out share (0.3)")
     p.add_argument("--seed", type=int, default=0, metavar="S", help="split seed (0)")
+    level_opt(p)
     p.add_argument("--json", action="store_true", help="machine-readable output")
 
     # calibrate
@@ -1431,6 +1492,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sweep-run-id", metavar="ID", default=None, help="eval run to sweep")
     p.add_argument("-o", "--output", required=True, metavar="OUT", help=".html or .md")
     p.add_argument("--tolerance", type=float, default=None, metavar="T")
+    level_opt(p)
 
     # runs
     p = add("runs", "list the runs in a ledger", "examples:\n  shadowgate runs --json", _cmd_runs)
@@ -1448,6 +1510,19 @@ def build_parser() -> argparse.ArgumentParser:
     ledger_opt(p)
     run_id_opt(p)
     p.add_argument("-o", "--output", required=True, metavar="OUT.jsonl")
+
+    # import
+    p = add(
+        "import",
+        "import exported decisions (JSONL) into a ledger, creating it if needed",
+        "examples:\n  shadowgate import nightly.jsonl\n"
+        "  shadowgate import a.jsonl b.jsonl --ledger merged.sqlite\n\n"
+        "Decisions are upserted by (run id, task id). Run config snapshots are not part of an\n"
+        "export, so pass --tolerance to `audit`/`report` for imported runs.",
+        _cmd_import,
+    )
+    p.add_argument("files", nargs="+", metavar="FILE.jsonl", help="exported decision files")
+    ledger_opt(p)
 
     # datasets
     p = sub.add_parser(

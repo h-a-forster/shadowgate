@@ -630,3 +630,122 @@ def test_ascii_console_does_not_crash(workspace: dict[str, Path]) -> None:
     )  # fmt: skip
     assert proc.returncode == 0, proc.stderr
     assert b"3/3 done" in proc.stdout
+
+
+# --------------------------------------------------------------------------- import / --level
+
+
+def test_import_round_trip(
+    workspace: dict[str, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    src = str(workspace["ledger"])
+    s1, e1 = tmp_path / "s1.jsonl", tmp_path / "e1.jsonl"
+    assert main(["export", "--ledger", src, "--run-id", "s1", "-o", str(s1)]) == 0
+    assert main(["export", "--ledger", src, "--run-id", "e1", "-o", str(e1)]) == 0
+    capsys.readouterr()
+    fresh = tmp_path / "sub" / "fresh.sqlite"
+    assert main(["import", str(s1), str(e1), "--ledger", str(fresh)]) == 0
+    out = capsys.readouterr().out
+    assert f"imported {2 * N_TASKS} decisions (runs: s1, e1)" in out
+    assert fresh.is_file()
+
+    def audit_json(ledger: str) -> dict:
+        args = ["audit", "--ledger", ledger, "--run-id", "s1", "--tolerance", "0.05", "--json"]
+        assert main(args) == 0
+        return json.loads(capsys.readouterr().out)
+
+    assert audit_json(str(fresh)) == audit_json(src)
+    # Re-importing upserts: no duplicates.
+    assert main(["import", str(s1), "--ledger", str(fresh)]) == 0
+    capsys.readouterr()
+    with Ledger(fresh) as led:
+        assert {r.run_id: r.n_decisions for r in led.runs()} == {"s1": N_TASKS, "e1": N_TASKS}
+
+
+@needs_report
+def test_import_round_trip_report_identical(
+    workspace: dict[str, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import datetime as dt
+
+    from shadowgate import report
+    from shadowgate.audit import summarize
+    from shadowgate.sweep import sweep
+
+    exported = tmp_path / "e1.jsonl"
+    assert main(["export", "--ledger", str(workspace["ledger"]), "--run-id", "e1",
+                 "-o", str(exported)]) == 0  # fmt: skip
+    fresh = tmp_path / "fresh.sqlite"
+    assert main(["import", str(exported), "--ledger", str(fresh)]) == 0
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+    html = []
+    for i, path in enumerate((workspace["ledger"], fresh)):
+        with Ledger(path) as led:
+            ds = list(led.decisions("e1"))
+        out = report.write_report(
+            tmp_path / f"r{i}.html", summarize(ds, tolerance=0.05), sweep(ds), now=now
+        )
+        html.append(out.read_text(encoding="utf-8"))
+    assert html[0] == html[1]
+
+
+def test_import_missing_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    ledger = tmp_path / "l.sqlite"
+    assert main(["import", str(tmp_path / "nope.jsonl"), "--ledger", str(ledger)]) == 2
+    assert "no such file" in capsys.readouterr().err
+    assert not ledger.exists()
+
+
+def test_import_invalid_record(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text('{"run_id": "x"}\n', encoding="utf-8")
+    assert main(["import", str(bad), "--ledger", str(tmp_path / "l.sqlite")]) == 1
+    assert "invalid decision record" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("cmd", ["audit", "sweep", "report"])
+@pytest.mark.parametrize("bad", ["0.5", "1", "1.2", "x"])
+def test_level_validation(
+    workspace: dict[str, Path], tmp_path: Path, cmd: str, bad: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    extra = ["-o", str(tmp_path / "r.md")] if cmd == "report" else []
+    args = [cmd, "--ledger", str(workspace["ledger"]), "--level", bad, *extra]
+    assert main(args) == 2
+    assert "level" in capsys.readouterr().err
+
+
+def test_level_passed_through(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    ledger = str(workspace["ledger"])
+    assert main(["audit", "--ledger", ledger, "--run-id", "s1", "--json"]) == 0
+    base = json.loads(capsys.readouterr().out)
+    assert main(["audit", "--ledger", ledger, "--run-id", "s1", "--json", "--level", "0.99"]) == 0
+    strict = json.loads(capsys.readouterr().out)
+    assert base["level"] == 0.95 and strict["level"] == 0.99
+    b, s = base["escalation_rate"], strict["escalation_rate"]
+    assert s["lo"] <= b["lo"] and s["hi"] >= b["hi"] and (s["hi"] - s["lo"]) > (b["hi"] - b["lo"])
+    assert main(["sweep", "--ledger", ledger, "--json", "--level", "0.99"]) == 0
+    sw = json.loads(capsys.readouterr().out)
+    assert sw["baselines"]["only:slow"]["accuracy"]["level"] == 0.99
+
+
+def test_level_help_mentions_repeated_checks(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["audit", "--help"]) == 0
+    assert "0.99" in capsys.readouterr().out
+
+
+def test_cli_output_is_ascii(workspace: dict[str, Path]) -> None:
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    env.pop("SHADOWGATE_DEBUG", None)
+    proc = subprocess.run(
+        [sys.executable, "-m", "shadowgate", "run", *_common(workspace),
+         "--run-id", "r-cp1252", "--limit", "3"],
+        capture_output=True,
+        env=env,
+        timeout=120,
+    )  # fmt: skip
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.isascii() and proc.stderr.isascii()
+    assert b"3/3 done | " in proc.stdout
