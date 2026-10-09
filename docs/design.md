@@ -20,7 +20,7 @@ and draws the accuracy/cost Pareto curve, so a threshold is chosen from data rat
 |---|---|
 | tier | one model + prompt + (optional) confidence estimator + threshold |
 | accepted / skipped case | a decision answered by a non-final tier without escalation |
-| reference tier | the tier used for shadow audits; defaults to the last tier |
+| reference tier | the tier used for shadow audits; is the last tier |
 | disagreement rate | share of skipped cases where the reference tier's answer differs |
 | error rate | share of skipped cases whose answer is wrong vs ground truth (needs references) |
 | inclusion probability π | chance a skipped case is selected for audit; estimates weight by 1/π |
@@ -229,10 +229,10 @@ class Tier:
 @dataclass(frozen=True)
 class AuditPolicy:
     rate: float = 0.1                       # uniform inclusion probability
-    strata: tuple[tuple[float, float, float], ...] = ()   # (lo, hi, rate) on confidence; first match wins
+    strata: tuple[tuple[float, float, float], ...] = ()   # (lo, hi, rate) on confidence; first match wins; the band(s) with the largest hi (or hi >= 1) include conf == hi
     floor: float = 0.01                     # min inclusion prob; must be > 0 to keep estimates unbiased
     mode: str = "inline"                    # "inline" | "deferred" | "off"
-    audit_tier: str | None = None           # None -> last tier
+    audit_tier: str | None = None           # None or the last tier's name; any other tier is a ConfigError
     seed: int = 0
     def inclusion_prob(self, confidence: float | None) -> float
     def selected(self, run_id: str, task_id: str, prob: float) -> bool   # sha256-based, reproducible
@@ -254,8 +254,12 @@ class Cascade:
 2. `BackendError` -> Attempt(error=str, accepted=False, completion=None); continue to the next tier
    (escalation on failure). If the last tier fails, Decision.error is set, answer is the best
    accepted-or-last available answer or "".
-3. Extract the answer. Non-final tier: estimate confidence; `accepted = score is not None and
-   score >= threshold`. Final tier: accepted = True.
+3. Extract the answer. Non-final tier: if the completion's stop_reason is "refusal", "error" or
+   "max_tokens", or the answer is empty, the estimator is skipped and the attempt escalates
+   (`confidence.score = None`, `detail["rejected"]` says why); otherwise estimate confidence;
+   `accepted = score is not None and score >= threshold`. If the estimator raises without
+   carrying its `calls`, `detail = {"error", "cost_unknown": True}` and `cost_usd` is None.
+   Final tier: accepted = True.
 4. Serve mode stops at the first accepted tier. Eval mode runs every tier regardless; the
    decision's `answer`/`final_tier`/`escalated` still reflect what the router would have done at
    the configured thresholds; non-final attempts get `agreement` vs the last tier's answer.

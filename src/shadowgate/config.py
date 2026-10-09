@@ -147,7 +147,7 @@ def load_config(path: str | Path) -> Config:
     except OSError as exc:
         raise ConfigError(f"cannot read config file {p}: {exc.strerror or exc}") from None
     try:
-        text = data.decode("utf-8")
+        text = data.decode("utf-8-sig")  # tolerate a UTF-8 BOM (e.g. Windows editors)
     except UnicodeDecodeError as exc:
         raise ConfigError(f"{p}: config file is not valid UTF-8 ({exc.reason})") from None
     try:
@@ -614,6 +614,12 @@ def _validate(
             raise ConfigError(
                 f"audit.tier: unknown tier {_q(tier_name)}{_suggest(tier_name, list(names))} "
                 f"(tiers: {', '.join(names)})"
+            )
+        final_name = list(names)[-1]
+        if tier_name != final_name:
+            raise ConfigError(
+                f"audit.tier: must be the final tier {_q(final_name)}, got {_q(tier_name)} "
+                "(a non-final audit tier would audit accepted cases by themselves or a weaker tier)"
             )
     if "seed" in audit:
         _int(audit["seed"], "audit.seed")

@@ -402,6 +402,10 @@ def test_api_key_env_must_be_a_name() -> None:
         (lambda d: d.update(audit={"tolerance": 1.0}), r"^audit\.tolerance: "),
         (lambda d: d.update(audit={"mode": "inlne"}), r'^audit\.mode: .*did you mean "inline"'),
         (lambda d: d.update(audit={"tier": "slwo"}), r'^audit\.tier: unknown tier "slwo"'),
+        (
+            lambda d: d.update(audit={"tier": "fast"}),
+            r'^audit\.tier: must be the final tier "slow"',
+        ),
         (lambda d: d.update(audit={"strata": [[0.8, 0.9]]}), r"^audit\.strata\[0\]: must be"),
         (lambda d: d.update(audit={"strata": [[0.9, 0.8, 0.1]]}), r"^audit\.strata\[0\]: lo"),
         (
@@ -466,6 +470,15 @@ def test_toml_syntax_error_has_file_and_line(tmp_path: Path) -> None:
         load_config(f)
     msg = str(info.value)
     assert str(f) in msg and "line 3" in msg
+
+
+def test_utf8_bom_config_parses(tmp_path: Path) -> None:
+    f = tmp_path / "bom.toml"
+    body = '[backends.b]\ntype = "simulated"\nskill = 1\n\n[[tiers]]\nbackend = "b"\n'
+    f.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+    cfg = load_config(f)
+    cascade, _ = cfg.build(tasks=TASKS)
+    assert [tier.name for tier in cascade.tiers] == ["b"]
 
 
 def test_missing_file(tmp_path: Path) -> None:

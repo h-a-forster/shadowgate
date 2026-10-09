@@ -526,21 +526,21 @@ def test_audit_failure_status_error() -> None:
     assert sh.agreement is None and d.attempts[0].agreement is None
 
 
-def test_custom_audit_tier() -> None:
+def test_audit_tier_must_be_final() -> None:
     a, b, c = FakeBackend("a"), FakeBackend("b"), FakeBackend("c")
-    cas = Cascade(
-        [
-            Tier("a", a, threshold=0.5, estimator=FakeEstimator(0.9)),
-            Tier("b", b, threshold=0.5, estimator=FakeEstimator(0.9)),
-            Tier("c", c),
-        ],
-        extractor=FakeExtractor(),
-        audit=AuditPolicy(rate=1.0, audit_tier="b"),
-        judge=FakeComparator(),
-    )
+    tiers = [
+        Tier("a", a, threshold=0.5, estimator=FakeEstimator(0.9)),
+        Tier("b", b, threshold=0.5, estimator=FakeEstimator(0.9)),
+        Tier("c", c),
+    ]
+    # Regression: a non-final audit tier audited its own accepted cases (always "agree").
+    for name in ("a", "b"):
+        with pytest.raises(ConfigError, match=r"must be the final tier 'c'"):
+            _mk(tiers, audit=AuditPolicy(rate=1.0, audit_tier=name))
+    cas = _mk(tiers, audit=AuditPolicy(rate=1.0, audit_tier="c"))  # naming the final tier is ok
     d = cas.route(t())
-    assert d.shadow is not None and d.shadow.audit_tier == "b" and d.shadow.status == "done"
-    assert b.roles() == ["audit"] and c.calls == []
+    assert d.shadow is not None and d.shadow.audit_tier == "c" and d.shadow.status == "done"
+    assert c.roles() == ["audit"] and b.calls == []
 
 
 def test_judge_defaults_to_comparator_and_separate_judge() -> None:
@@ -575,6 +575,16 @@ def test_strata_first_match_wins_and_inner_hi_exclusive() -> None:
     assert pol2.inclusion_prob(0.9) == 0.3  # last stratum inclusive
     pol3 = AuditPolicy(rate=0.1, strata=((0.0, 0.5, 0.4), (0.5, 0.9, 0.3), (0.9, 0.95, 0.2)))
     assert pol3.inclusion_prob(0.9) == 0.2
+
+
+def test_strata_top_hi_inclusive_regardless_of_order() -> None:
+    pol = AuditPolicy(rate=0.05, strata=((0.9, 1.0, 0.5), (0.0, 0.9, 0.05)))
+    assert pol.inclusion_prob(1.0) == 0.5  # regression: used to fall through to the default rate
+    assert pol.inclusion_prob(0.95) == 0.5
+    assert pol.inclusion_prob(0.9) == 0.5
+    pol2 = AuditPolicy(rate=0.3, strata=((0.5, 0.8, 0.9), (0.0, 0.5, 0.1)))
+    assert pol2.inclusion_prob(0.8) == 0.9  # largest hi is inclusive even when < 1
+    assert pol2.inclusion_prob(0.5) == 0.9
 
 
 def test_floor_applies() -> None:
@@ -779,3 +789,88 @@ def test_concurrent_routing() -> None:
         assert (d.shadow is None) == (i % 2 == 0)
         assert d.shadow == serial[i].shadow
     assert len(fast.calls) == 600
+
+
+# --------------------------------------------------------------------------- regressions
+
+
+class StopReasonBackend:
+    """Returns a fixed text with a given stop_reason."""
+
+    def __init__(self, name: str, text: str, stop_reason: str = "end") -> None:
+        self.name = name
+        self.text = text
+        self.stop_reason = stop_reason
+        self.calls: list[Request] = []
+
+    def complete(self, request: Request) -> Completion:
+        self.calls.append(request)
+        return Completion(
+            text=self.text, model=self.name, cost_usd=0.01, stop_reason=self.stop_reason
+        )
+
+
+class CountingEstimator(FakeEstimator):
+    def __init__(self, score: float = 1.0) -> None:
+        super().__init__(score)
+        self.n = 0
+
+    def estimate(
+        self, task: Task, request: Request, completion: Completion, answer: str, backend: Backend
+    ) -> ConfidenceResult:
+        self.n += 1
+        return super().estimate(task, request, completion, answer, backend)
+
+
+@pytest.mark.parametrize(
+    ("text", "stop_reason", "reason"),
+    [
+        ("ANSWER: 4", "refusal", "stop_reason=refusal"),
+        ("ANSWER: 4", "error", "stop_reason=error"),
+        ("ANSWER: 4", "max_tokens", "stop_reason=max_tokens"),
+        ("ANSWER:   ", "end", "empty answer"),
+        ("", "end", "empty answer"),
+    ],
+)
+def test_unusable_completion_escalates(text: str, stop_reason: str, reason: str) -> None:
+    est = CountingEstimator(1.0)
+    slow = FakeBackend("s", default="ANSWER: 4")
+    cas = Cascade(
+        [
+            Tier("fast", StopReasonBackend("f", text, stop_reason), threshold=0.0, estimator=est),
+            Tier("slow", slow),
+        ],
+        extractor=FakeExtractor(),
+    )
+    d = cas.route(t())
+    att = d.attempts[0]
+    assert not att.accepted and d.final_tier == "slow" and d.answer == "4"
+    assert att.confidence is not None and att.confidence.score is None
+    assert att.confidence.detail["rejected"] == reason
+    assert est.n == 0  # estimator not run on an unusable completion
+
+
+def test_final_tier_refusal_still_served() -> None:
+    cas = Cascade([Tier("only", StopReasonBackend("f", "", "refusal"))], extractor=FakeExtractor())
+    d = cas.route(t())
+    assert d.attempts[0].accepted and d.final_tier == "only" and d.error is None
+
+
+def test_estimator_exception_makes_cost_unknown() -> None:
+    fast, slow = FakeBackend("f", default="ANSWER: 4"), FakeBackend("s", default="ANSWER: 4")
+    d = two_tier(fast, slow, estimator=FakeEstimator(raises=RuntimeError("bug"))).route(t())
+    conf = d.attempts[0].confidence
+    assert conf is not None and conf.score is None
+    assert conf.detail == {"error": "RuntimeError: bug", "cost_unknown": True}
+    assert d.cost_usd is None  # monitor/resample spend before the raise is unknowable
+    assert d.final_tier == "slow"
+
+
+def test_estimator_exception_with_calls_keeps_known_cost() -> None:
+    exc = RuntimeError("bug")
+    exc.calls = (Completion(text="", model="mon", cost_usd=0.5),)  # type: ignore[attr-defined]
+    fast, slow = FakeBackend("f", default="ANSWER: 4"), FakeBackend("s", default="ANSWER: 4")
+    d = two_tier(fast, slow, estimator=FakeEstimator(raises=exc)).route(t())
+    conf = d.attempts[0].confidence
+    assert conf is not None and "cost_unknown" not in conf.detail and len(conf.calls) == 1
+    assert d.cost_usd == pytest.approx(0.01 + 0.5 + 0.01)

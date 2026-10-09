@@ -5,9 +5,9 @@ estimator scores the answer, and the answer is served when the score clears the 
 threshold; otherwise the task escalates. The final tier always serves what it produces.
 
 Accepted answers from non-final tiers ("skipped cases") are sampled for a shadow audit under an
-:class:`AuditPolicy`: the audit (reference) tier re-answers the task and a judge compares the two
-answers. Every accepted case records its inclusion probability so downstream estimates can
-weight by ``1 / inclusion_prob`` and stay unbiased.
+:class:`AuditPolicy`: the audit (reference) tier, which is always the final tier, re-answers the
+task and a judge compares the two answers. Every accepted case records its inclusion probability
+so downstream estimates can weight by ``1 / inclusion_prob`` and stay unbiased.
 
 Notes on configuration:
 
@@ -18,6 +18,17 @@ Notes on configuration:
   "always escalate" (scores live in [0, 1]); 0 means "accept whenever a score exists".
 * The final tier's ``threshold`` and ``estimator`` are ignored: whatever it answers is served.
 * ``audit=None`` disables shadow audits entirely (no inclusion probabilities are recorded).
+* ``AuditPolicy.audit_tier`` may only name the final tier (or be None, meaning the final tier):
+  every non-final tier can accept, so any other audit tier would audit some accepted cases with
+  themselves or a weaker tier and the audit would be meaningless.
+* A non-final tier never accepts a completion whose ``stop_reason`` is "refusal", "error" or
+  "max_tokens", or whose extracted answer is empty: the estimator is not run, the attempt
+  escalates, and ``confidence`` records ``score=None`` with ``detail["rejected"]`` giving why.
+* If a non-final tier's estimator raises, money its monitor/resample calls already spent is not
+  visible, so the decision's ``cost_usd`` becomes unknown (None) and the confidence detail carries
+  ``{"error": ..., "cost_unknown": True}`` (unless the exception carries the ``calls`` it made).
+* Audit strata: first match wins on ``lo <= conf < hi``; a band's ``hi`` is also inclusive when it
+  equals the largest ``hi`` among the bands (or is >= 1), whatever order the bands are listed in.
 """
 
 from __future__ import annotations
@@ -97,6 +108,30 @@ def _sum_costs(costs: Sequence[float | None]) -> float | None:
     return total
 
 
+UNUSABLE_STOP_REASONS = frozenset({"refusal", "error", "max_tokens"})
+
+
+def _unusable(completion: Completion, answer: str) -> str | None:
+    """Why a non-final tier must not accept this completion, or None if it may."""
+    if completion.stop_reason in UNUSABLE_STOP_REASONS:
+        return f"stop_reason={completion.stop_reason}"
+    if not answer.strip():
+        return "empty answer"
+    return None
+
+
+def _exc_calls(exc: BaseException) -> tuple[Completion, ...] | None:
+    """Completions an estimator exception says it made (``exc.calls``), if it carries them."""
+    calls = getattr(exc, "calls", None)
+    if calls is None:
+        return None
+    try:
+        calls = tuple(calls)
+    except TypeError:
+        return None
+    return calls if all(isinstance(c, Completion) for c in calls) else None
+
+
 def _err(exc: BaseException) -> str:
     msg = str(exc)
     return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__
@@ -149,7 +184,8 @@ class AuditPolicy:
     """How accepted (skipped) cases are sampled for shadow audits.
 
     ``strata`` are ``(lo, hi, rate)`` bands on the served confidence; the first band with
-    ``lo <= conf < hi`` wins (the last band also includes ``conf == hi``). Unmatched or missing
+    ``lo <= conf < hi`` wins; a band whose ``hi`` is the largest ``hi`` (or >= 1) also includes
+    ``conf == hi``, regardless of listing order. Unmatched or missing
     confidence uses ``rate``. The result is never below ``floor`` (> 0), which keeps every
     accepted case auditable and inverse-probability estimates unbiased.
     """
@@ -184,9 +220,10 @@ class AuditPolicy:
     def inclusion_prob(self, confidence: float | None) -> float:
         value = self.rate
         if confidence is not None and not math.isnan(confidence):
-            last = len(self.strata) - 1
-            for i, (lo, hi, r) in enumerate(self.strata):
-                if lo <= confidence < hi or (i == last and confidence == hi):
+            top = max(hi for _, hi, _ in self.strata) if self.strata else None
+            for lo, hi, r in self.strata:
+                closed = hi == top or hi >= 1.0
+                if lo <= confidence < hi or (closed and confidence == hi):
                     value = r
                     break
         return max(self.floor, value)
@@ -235,8 +272,15 @@ class Cascade:
                     raise ConfigError(f"tier {t.name!r} is not final and needs an estimator")
                 if t.threshold is None:
                     raise ConfigError(f"tier {t.name!r} is not final and needs a threshold")
-        if audit is not None and audit.audit_tier is not None and audit.audit_tier not in seen:
-            raise ConfigError(f"audit tier {audit.audit_tier!r} is not one of {sorted(seen)}")
+        if audit is not None and audit.audit_tier is not None:
+            if audit.audit_tier not in seen:
+                raise ConfigError(f"audit tier {audit.audit_tier!r} is not one of {sorted(seen)}")
+            if audit.audit_tier != tiers[-1].name:
+                raise ConfigError(
+                    f"audit tier {audit.audit_tier!r} must be the final tier {tiers[-1].name!r}: "
+                    "a non-final audit tier would audit accepted cases with themselves or a "
+                    "weaker tier"
+                )
 
         if extractor is None and any(t.extractor is None for t in tiers):
             from shadowgate import extract
@@ -450,14 +494,20 @@ class Cascade:
 
         confidence: ConfidenceResult | None = None
         if estimator is not None:
-            try:
-                confidence = estimator.estimate(task, request, completion, answer, tier.backend)
-            except Exception as exc:
-                confidence = ConfidenceResult(
-                    estimator=getattr(estimator, "name", type(estimator).__name__),
-                    score=None,
-                    detail={"error": _err(exc)},
-                )
+            est_name = getattr(estimator, "name", type(estimator).__name__)
+            rejected = _unusable(completion, answer)
+            if rejected is not None:
+                confidence = ConfidenceResult(est_name, None, detail={"rejected": rejected})
+            else:
+                try:
+                    confidence = estimator.estimate(task, request, completion, answer, tier.backend)
+                except Exception as exc:
+                    calls = _exc_calls(exc)
+                    detail: dict[str, Any] = {"error": _err(exc)}
+                    if calls is None:
+                        # Calls made before the exception are lost: the cost is unknowable.
+                        detail["cost_unknown"] = True
+                    confidence = ConfidenceResult(est_name, None, calls or (), detail=detail)
             score = confidence.score
             accepted = (
                 score is not None
@@ -512,9 +562,14 @@ class Cascade:
         return _sum_costs([c.cost_usd for c in calls])
 
     def _attempt_cost(self, att: Attempt) -> float | None:
-        """Model call plus confidence calls. A failed call (no completion) counts as 0."""
+        """Model call plus confidence calls. A failed call (no completion) counts as 0.
+
+        None (unknown) when the estimator raised and its already-made calls were lost.
+        """
         cost = 0.0 if att.completion is None else att.completion.cost_usd
         if att.confidence is not None:
+            if att.confidence.detail.get("cost_unknown"):
+                return None
             cost = _add(cost, self._calls_cost(att.confidence.calls))
         return cost
 
