@@ -1,0 +1,43 @@
+# Haiku 5.5 (low effort) -> Opus 5.5 on 200 multi-step arithmetic word problems (6-12 steps).
+# Runs through the Claude Code CLI. Reproduce with experiments/arithmetic-haiku-opus/run.sh.
+
+[run]
+name = "arith-haiku-opus"
+workers = 4
+max_cost_usd = 10.00
+cache = true
+ledger = "ledger.sqlite"
+seed = 2026
+
+[backends.haiku]
+type = "claude-code"
+model = "claude-haiku-5-5"
+timeout_s = 300
+max_attempts = 3
+
+[backends.opus]
+type = "claude-code"
+model = "claude-opus-5-5"
+timeout_s = 900
+max_attempts = 3
+
+[[tiers]]
+name = "haiku"
+backend = "haiku"
+effort = "low"
+threshold = 0.8
+confidence = { type = "verbal" }
+
+[[tiers]]
+name = "opus"
+backend = "opus"
+
+[answer]
+extractor = "final_line"
+comparator = { type = "numeric" }
+
+[audit]
+mode = "inline"
+rate = 0.2
+strata = [[0.8, 0.95, 0.5], [0.95, 1.0, 0.2]]
+tolerance = 0.05

@@ -1,21 +1,89 @@
-# Results
+# Results: Haiku 5.5 -> Opus 5.5 on multi-step arithmetic
+
+One real run, 2026-10-09. Full report: [`results/arithmetic-haiku-opus.html`](results/arithmetic-haiku-opus.html).
+Raw decisions: [`experiments/arithmetic-haiku-opus/`](../experiments/arithmetic-haiku-opus/).
 
 ## Setup
 
-TODO: models, tiers, confidence signal, task set and size, audit settings, date.
+| | |
+|---|---|
+| Tasks | 200 generated word problems, 6-12 arithmetic steps, integer answers (`datasets make arithmetic --seed 2026 --min-steps 6 --max-steps 12`) |
+| Fast tier | `claude-haiku-5-5`, effort `low` |
+| Final tier | `claude-opus-5-5`, default effort |
+| Confidence | verbal: the fast tier ends with `CONFIDENCE: <0-1>` |
+| Threshold | 0.80 |
+| Grading | numeric comparison against the generator's reference answer |
+| Audit (serve run) | inline; inclusion probability 0.5 for confidence in [0.80, 0.95), 0.2 for [0.95, 1.00] |
+| Backend | Claude Code CLI 2.1.287; cost from the shadowgate price table (USD list prices) |
+
+Two runs share one response cache. The eval run calls both tiers on every task. The serve run
+routes normally and audits a sample of the kept cases; every call it makes is a cache hit, so the
+two runs see identical model outputs.
 
 ## Results
 
-TODO: eval-mode sweep (frontier, recommended threshold, held-out accuracy and cost) and serve-mode audit summary.
+| Policy | Accuracy (95% CI) | Cost per task | Escalated |
+|---|---|---|---|
+| Haiku only | 95.0% (91.0-97.3) | $0.00047 | - |
+| Opus only | 100.0% (98.1-100.0) | $0.0115 | - |
+| Cascade, threshold 0.80 | 98.5% (95.7-99.5) | $0.0016 | 9.5% |
+| Cascade, threshold 0.85 (sweep pick) | 99.0% (96.4-99.7) | $0.0024 | 16.5% |
+| Oracle router (lower bound) | 100.0% | $0.0010 | 5.0% |
+
+At threshold 0.80 the cascade costs 86.5% less than Opus alone (95% CI 85.6-87.3%) and loses 1.5
+points of accuracy. The sweep's `max-savings` objective (accuracy within 1 point of Opus) picked
+0.85 on a 140-task selection split. On the 60 held-out tasks it scored 98.3%, just under the target;
+the report flags this. With 60 held-out tasks the interval is wide (91.1-99.7%).
+
+Verbal confidence ranked answers well: AUROC 0.91 for "Haiku is correct". It was not calibrated in
+the usual direction. Haiku reported a mean confidence of 0.93 on the answers it kept, which implies
+about 7% errors. The measured error on those answers was 1.7%.
 
 ## What the audit found
 
-TODO: skipped-case disagreement and error with intervals, per-bin breakdown, and how they compare with the sweep.
+Haiku kept 181 of 200 answers. The serve run audited 51 of them with Opus.
+
+| Confidence bin | Kept | Audited | Disagreement with Opus (95% CI) | Error vs reference (95% CI) |
+|---|---|---|---|---|
+| [0.80, 0.90) | 44 | 15 | 13.3% (1.7-40.5) | 4.5% (1.3-15.1) |
+| [0.90, 0.95) | 30 | 16 | 0% (0.0-20.6) | 3.3% (0.6-16.7) |
+| [0.95, 1.00] | 107 | 20 | 0% (0.0-16.8) | 0% (0.0-3.5) |
+| All kept | 181 | 51 | 2.5% (0.1-12.7), weighted | 1.7% (0.6-4.8) |
+
+- Three kept answers were wrong, at confidence 0.80, 0.85 and 0.93. All three were off by a large
+  factor (for example 3432 vs 816), which points to a skipped multiplication or division step.
+- Seven of Haiku's ten errors had confidence 0.60 or below and escalated.
+- The weighted disagreement estimate (2.5%) agrees with the full error count (1.7%) but its interval
+  is much wider, because it rests on 51 audits rather than 181 graded answers. On production traffic
+  without reference answers, the audit estimate is what you get.
+- Against a 5% tolerance the run passes: the upper bound on kept-case error is 4.8%.
+- Audit spend was 1.9x the serving spend. Audits run on Opus, which costs about 25x Haiku per task;
+  the audit rates here were set high so a 200-task run yields a usable sample. At a flat 5% audit
+  rate the overhead would be about 0.3x.
 
 ## Reproduce
 
-TODO: exact config, task file and commands.
+```sh
+sh experiments/arithmetic-haiku-opus/run.sh
+```
+
+The script regenerates the task file, runs eval and serve modes, sweeps and writes the report. It
+needs a logged-in Claude Code CLI and makes about 400 model calls (about $2.40 at list prices).
+To rebuild the report from the committed decisions without model calls:
+
+```sh
+shadowgate import experiments/arithmetic-haiku-opus/decisions-eval.jsonl --ledger tmp/ledger.sqlite
+shadowgate import experiments/arithmetic-haiku-opus/decisions-serve.jsonl --ledger tmp/ledger.sqlite
+shadowgate report --ledger tmp/ledger.sqlite --run-id serve --sweep-run-id eval -o report.html
+```
 
 ## Limitations
 
-TODO: limitations specific to this experiment.
+- One task family, 200 tasks, one run. The confidence intervals are the honest summary; the point
+  estimates are not.
+- Arithmetic has exact reference answers. Most production tasks do not, and there the audit reports
+  disagreement with the final tier, not error.
+- Costs are list-price estimates from the shadowgate price table. Through the Claude Code CLI on a
+  subscription, no per-call charge applies.
+- Latency is not reported: each call starts a CLI process, which dominates the timing.
+- The held-out split is 60 tasks, too small to confirm a 1-point accuracy target.
