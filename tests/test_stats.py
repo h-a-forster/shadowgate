@@ -189,15 +189,78 @@ def test_clopper_pearson_empty_and_invalid():
 # ---------------------------------------------------------------------------- weighted_proportion
 
 
-def test_weighted_equal_weights_match_wilson_exactly():
+def test_weighted_equal_weights_match_clopper_pearson_exactly():
     for k, n in [(0, 5), (3, 10), (10, 10), (17, 123)]:
         ys = [True] * k + [False] * (n - k)
         for w in (1.0, 2.5, 7):
             e = weighted_proportion(ys, [w] * n)
+            ref = clopper_pearson(k, n)
+            assert (e.value, e.lo, e.hi) == (ref.value, ref.lo, ref.hi)
+            assert e.n == n and e.n_eff == n
+            assert e.method == "hajek-korn-graubard"
+
+
+def test_weighted_equal_weights_wilson_method_matches_wilson_exactly():
+    for k, n in [(0, 5), (3, 10), (10, 10), (17, 123)]:
+        ys = [True] * k + [False] * (n - k)
+        for w in (1.0, 2.5, 7):
+            e = weighted_proportion(ys, [w] * n, method="wilson")
             ref = wilson(k, n)
             assert (e.value, e.lo, e.hi) == (ref.value, ref.lo, ref.hi)
             assert e.n == n and e.n_eff == n
             assert e.method == "hajek-wilson"
+
+
+def test_weighted_rejects_unknown_method():
+    with pytest.raises(ValueError):
+        weighted_proportion([True, False], [1.0, 2.0], method="wald")
+
+
+def test_korn_graubard_fractional_counts_match_beta_quantiles():
+    # Reference values: scipy.stats.beta.ppf(0.025, x, n - x + 1) and
+    # beta.ppf(0.975, x + 1, n - x) with x = p * n_eff (non-integer).
+    lo, hi = stats.weighted_bounds(0.13, 23.7, 0.95, "korn-graubard")
+    x, n = 0.13 * 23.7, 23.7
+    assert stats.regularized_beta(lo, x, n - x + 1) == pytest.approx(0.025, abs=1e-12)
+    assert stats.regularized_beta(hi, x + 1, n - x) == pytest.approx(0.975, abs=1e-12)
+    assert 0.0 < lo < 0.13 < hi < 1.0
+
+
+def test_korn_graubard_wider_than_wilson_for_weighted_sample():
+    ys = [True, False, False, True, False, False]
+    ws = [1.0, 1.0, 10.0, 3.0, 2.0, 1.0]
+    kg = weighted_proportion(ys, ws)
+    wi = weighted_proportion(ys, ws, method="wilson")
+    assert kg.value == wi.value and kg.n_eff == wi.n_eff
+    assert kg.lo <= wi.lo and kg.hi >= wi.hi
+
+
+def test_korn_graubard_coverage_smoke_low_pi_stratum():
+    # Reviewer's design: half the population sits in a pi = .02 stratum holding most errors.
+    # Hajek-Wilson covers ~0.87 here at N = 500 and Korn-Graubard ~0.90 (still below nominal:
+    # this is the sparse-stratum case in which audit.summarize refuses to report "ok").
+    rng = random.Random(4)
+    design = [(100, 0.5, 0.02), (150, 0.1, 0.02), (250, 0.02, 0.40)]
+    reps, kg_cov, wi_cov, used = 600, 0, 0, 0
+    for _ in range(reps):
+        ys, ws, k, t = [], [], 0, 0
+        for m, p, e in design:
+            for _ in range(m):
+                y = rng.random() < e
+                t += 1
+                k += y
+                if rng.random() < p:
+                    ys.append(y)
+                    ws.append(1.0 / p)
+        true = k / t
+        kg = weighted_proportion(ys, ws)
+        wi = weighted_proportion(ys, ws, method="wilson")
+        used += 1
+        kg_cov += kg.lo <= true <= kg.hi
+        wi_cov += wi.lo <= true <= wi.hi
+    assert wi_cov / used < 0.89
+    assert kg_cov / used >= 0.89
+    assert kg_cov - wi_cov >= 0.02 * used
 
 
 def test_weighted_hajek_point_estimate():
@@ -217,8 +280,11 @@ def test_weighted_n_eff_is_min_of_kish_and_linearised():
     expected = min(sw * sw / sw2, p * (1 - p) / var)
     e = weighted_proportion(ys, ws)
     assert e.n_eff == pytest.approx(expected)
-    lo, hi = stats._wilson_bounds(p, expected, z_for(0.95))
+    lo, hi = stats._cp_bounds(p * expected, expected, 0.95)
     assert (e.lo, e.hi) == (pytest.approx(lo), pytest.approx(hi))
+    w = weighted_proportion(ys, ws, method="wilson")
+    lo, hi = stats._wilson_bounds(p, expected, z_for(0.95))
+    assert (w.lo, w.hi) == (pytest.approx(lo), pytest.approx(hi))
 
 
 def test_weighted_errors_in_heavy_units_widen_interval():

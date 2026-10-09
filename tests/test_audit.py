@@ -10,7 +10,7 @@ import pytest
 
 from shadowgate.audit import AuditSummary, infer_tier_order, summarize
 from shadowgate.cascade import AuditPolicy, Cascade, Tier
-from shadowgate.stats import weighted_proportion, wilson
+from shadowgate.stats import clopper_pearson, weighted_proportion, wilson
 from shadowgate.types import (
     Attempt,
     Completion,
@@ -272,10 +272,10 @@ def test_final_tier_unknown_treats_all_as_skipped() -> None:
 # --------------------------------------------------------------------------- serve mode
 
 
-def test_serve_uniform_pi_matches_wilson() -> None:
+def test_serve_uniform_pi_matches_clopper_pearson() -> None:
     ds = mixed_serve(17, 3, pi=0.2)
     s = summarize(ds)
-    ref = wilson(3, 20)
+    ref = clopper_pearson(3, 20)
     assert s.mode == "serve" and s.n_skipped == 20 and s.n_audited == 20
     assert s.disagreement is not None
     assert s.disagreement.value == pytest.approx(0.15)
@@ -728,3 +728,186 @@ def test_end_to_end_with_references_uses_skipped_error() -> None:
     assert s.skipped_error is not None and s.disagreement is not None
     assert s.skipped_error.lo is not None and s.skipped_error.hi is not None
     assert s.served_accuracy is not None
+
+
+# --------------------------------------------------------------------------- nonresponse & strata
+
+
+def test_nonresponse_reweighted_within_pi_stratum_by_hand() -> None:
+    # Stratum A: pi = .5, 50 selected, all done, 1 disagrees, 50 not selected.
+    # Stratum B: pi = .02, 10 selected: 6 pending, 4 done (2 disagree); 490 not selected.
+    ds = [skipped(f"a{k}", pi=0.5, equivalent=k >= 1) for k in range(50)]
+    ds += [skipped(f"an{k}", pi=0.5, status="skipped") for k in range(50)]
+    ds += [skipped(f"bp{k}", pi=0.02, status="pending") for k in range(6)]
+    ds += [skipped(f"b{k}", pi=0.02, equivalent=k >= 2) for k in range(4)]
+    ds += [skipped(f"bn{k}", pi=0.02, status="skipped") for k in range(490)]
+    s = summarize(ds)
+    # r_A = 1 -> w = 2; r_B = 0.4 -> w = 1 / (0.02 * 0.4) = 125.
+    assert s.disagreement is not None
+    assert s.disagreement.value == pytest.approx((1 * 2 + 2 * 125) / (50 * 2 + 4 * 125))
+    ref = weighted_proportion(
+        [k < 1 for k in range(50)] + [k < 2 for k in range(4)], [2.0] * 50 + [125.0] * 4
+    )
+    assert s.disagreement == ref
+    assert s.n_unrepresented == 0
+    assert any("missing at random within their stratum" in n for n in s.notes)
+
+
+def test_stratum_dependent_nonresponse_is_unbiased_monte_carlo() -> None:
+    # Reviewer's case, scaled down: 60% of audits pending only in the low-pi stratum (MCAR
+    # within strata). Unadjusted 1/pi weights are biased low (~0.13 vs truth ~0.21 here; the
+    # reviewer measured 0.130 vs 0.208 with pi = .02); the adjusted estimate is unbiased.
+    rng = random.Random(5)
+    strata = [(200, 0.5, 0.02), (300, 0.2, 0.02), (500, 0.1, 0.40)]
+    # Not-selected cases carry no outcome, so they are built once and reused.
+    pools = {
+        pi: [skipped(f"n{pi}-{j}", pi=pi, status="skipped") for j in range(m)]
+        for m, pi, _ in strata
+    }
+    reps = 30
+    ests: list[float] = []
+    truths: list[float] = []
+    naive: list[float] = []
+    for _ in range(reps):
+        ds: list[Decision] = []
+        k = 0
+        for m, pi, e in strata:
+            n_not = 0
+            for _ in range(m):
+                y = rng.random() < e
+                k += y
+                if rng.random() >= pi:
+                    n_not += 1
+                    continue
+                st = "pending" if pi == 0.1 and rng.random() < 0.6 else "done"
+                ds.append(skipped(len(ds), pi=pi, status=st, equivalent=not y))
+            ds += pools[pi][:n_not]
+        s = summarize(ds)
+        assert s.disagreement is not None and s.disagreement.value is not None
+        ests.append(s.disagreement.value)
+        truths.append(k / len(ds))
+        done = [d.shadow for d in ds if d.shadow is not None and d.shadow.status == "done"]
+        ys = [sh.agreement is not None and sh.agreement.equivalent is False for sh in done]
+        est = weighted_proportion(ys, [1 / sh.inclusion_prob for sh in done]).value
+        assert est is not None
+        naive.append(est)
+    truth = sum(truths) / reps
+    assert abs(sum(ests) / reps - truth) < 0.035
+    assert truth - sum(naive) / reps > 0.05  # the unadjusted estimator is clearly biased low
+
+
+def test_unrepresented_stratum_is_excluded_and_reported() -> None:
+    ds = mixed_serve(18, 2, pi=0.5)  # 20 audits, 10% disagree
+    ds += [skipped(f"p{k}", pi=0.05, status="pending") for k in range(2)]
+    ds += [skipped(f"n{k}", pi=0.05, status="skipped") for k in range(38)]
+    s = summarize(ds, tolerance=0.5)
+    assert s.n_unrepresented == 40
+    assert s.disagreement is not None and s.disagreement.value == pytest.approx(0.1)
+    assert any("cannot be represented" in n and "pi = 0.05" in n for n in s.notes)
+    # The unrepresented stratum holds 2/3 of the skipped cases: "ok" is blocked.
+    assert s.sparse_strata == 1 and s.status == "inconclusive"
+
+
+def _reviewer_design(n: int, disagree: bool) -> list[Decision]:
+    """Deterministic version of the reviewer's design: shares .2/.3/.5 at pi .5/.1/.02, with the
+    expected number of audits in each stratum."""
+    ds: list[Decision] = []
+    for share, pi in [(0.2, 0.5), (0.3, 0.1), (0.5, 0.02)]:
+        m = round(share * n)
+        n_sel = round(m * pi)
+        for k in range(m):
+            sel = k < n_sel
+            ds.append(
+                skipped(
+                    len(ds),
+                    pi=pi,
+                    status="done" if sel else "skipped",
+                    equivalent=not (disagree and sel and k == 0),
+                )
+            )
+    return ds
+
+
+def test_sparse_stratum_blocks_ok_regardless_of_outcomes() -> None:
+    # N = 500: the pi = .02 stratum holds 50% of skipped cases but only 5 audits.
+    for disagree in (False, True):
+        s = summarize(_reviewer_design(500, disagree), tolerance=0.9)
+        assert s.sparse_strata == 1
+        assert s.disagreement is not None and s.disagreement.hi is not None
+        assert s.disagreement.hi <= 0.9  # the interval alone would say "ok"
+        assert s.status == "inconclusive"
+        assert any("pi = 0.02" in n and "never 'ok'" in n for n in s.notes)
+    # With enough audits in every large stratum the same design can be "ok".
+    s = summarize(_reviewer_design(1000, False), tolerance=0.9)
+    assert s.sparse_strata == 0 and s.status == "ok"
+
+
+def test_single_stratum_few_audits_not_flagged_sparse() -> None:
+    s = summarize(mixed_serve(5, 0, pi=0.5), tolerance=0.9)
+    assert s.sparse_strata == 0 and s.status == "ok"
+
+
+def test_continuous_pi_grouped_into_quantile_strata() -> None:
+    # 60 distinct pi values -> 5 quantile groups of 12. With every selected audit done the
+    # weights are plain 1/pi.
+    def pi_of(k: int) -> float:
+        return 0.05 + 0.01 * k
+
+    ds = [skipped(k, pi=pi_of(k), equivalent=k % 4 != 0) for k in range(60)]
+    s = summarize(ds)
+    ys = [k % 4 == 0 for k in range(60)]
+    assert s.disagreement == weighted_proportion(ys, [1 / pi_of(k) for k in range(60)])
+    # Half the audits of the lowest-pi group pending: survivors there get weight 2/pi.
+    pending = {1, 3, 5, 7, 9, 11}
+    ds2 = [
+        skipped(k, pi=pi_of(k), equivalent=k % 4 != 0, status="pending" if k in pending else "done")
+        for k in range(60)
+    ]
+    s2 = summarize(ds2)
+    kept = [k for k in range(60) if k not in pending]
+    ws = [(2.0 if k < 12 else 1.0) / pi_of(k) for k in kept]
+    assert s2.disagreement == weighted_proportion([k % 4 == 0 for k in kept], ws)
+
+
+# --------------------------------------------------------------------------- resolving
+
+
+def test_census_inconclusive_needs_tasks_not_audits() -> None:
+    # Every skipped case graded and audited (pi = 1): more audits cannot help.
+    ds = [skipped(i, pi=1.0, equivalent=i >= 6, correct=i >= 6) for i in range(60)]
+    s = summarize(ds, tolerance=0.08)
+    assert s.status == "inconclusive" and s.status_metric == "skipped_error"
+    assert s.audits_to_resolve is None
+    assert s.tasks_to_resolve is not None and s.tasks_to_resolve > 0
+    # Census through disagreement only (no references): also tasks, not audits.
+    ds = [skipped(i, pi=1.0, equivalent=i >= 6) for i in range(60)]
+    s = summarize(ds, tolerance=0.08)
+    assert s.status_metric == "disagreement" and s.status == "inconclusive"
+    assert s.audits_to_resolve is None and s.tasks_to_resolve is not None
+    n_total = 60 + s.tasks_to_resolve
+    more = [skipped(i, pi=1.0, equivalent=i % 10 != 0) for i in range(n_total)]
+    assert summarize(more, tolerance=0.08).status == "breach"
+
+
+def test_eval_mode_inconclusive_has_no_audits_to_resolve() -> None:
+    ds = [eval_decision(i, agree=i >= 4) for i in range(30)]
+    s = summarize(ds, tolerance=0.1)
+    assert s.status == "inconclusive"
+    assert s.audits_to_resolve is None and s.tasks_to_resolve is not None
+
+
+def test_sampled_inconclusive_reports_audits_and_tasks() -> None:
+    ds = mixed_serve(17, 3, pi=0.2)
+    ds += [skipped(100 + k, pi=0.2, status="skipped") for k in range(80)]
+    s = summarize(ds, tolerance=0.1)
+    assert s.status == "inconclusive"
+    assert s.audits_to_resolve is not None and s.tasks_to_resolve is not None
+    # 20 audits out of 100 skipped cases: about 5 skipped cases per extra audit.
+    assert s.tasks_to_resolve == pytest.approx(5 * s.audits_to_resolve, abs=5)
+
+
+def test_docstring_documents_optional_stopping() -> None:
+    import shadowgate.audit as audit_mod
+
+    doc = audit_mod.__doc__ or ""
+    assert "optional stopping" in doc and "level" in doc

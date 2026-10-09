@@ -28,6 +28,8 @@ References
 * Hajek, J. (1971); Sarndal, Swensson & Wretman (1992), *Model Assisted Survey Sampling*,
   ch. 5.7 (ratio estimator and its Taylor-linearised variance).
 * Kish, L. (1965). *Survey Sampling* (effective sample size under unequal weighting).
+* Korn, E. L. & Graubard, B. I. (1998). Confidence intervals for proportions with small expected
+  number of positive counts estimated from survey data. *Survey Methodology* 24(2), 193-201.
 * Acklam, P. J. (2003). An algorithm for computing the inverse normal cumulative distribution
   function.
 * Press et al., *Numerical Recipes* (3rd ed.), 6.4 (incomplete beta by continued fraction,
@@ -63,6 +65,7 @@ __all__ = [
     "reliability",
     "required_n",
     "risk_coverage",
+    "weighted_bounds",
     "weighted_proportion",
     "wilson",
     "z_for",
@@ -356,6 +359,22 @@ def _beta_ppf(q: float, a: float, b: float) -> float:
     return 0.5 * (lo + hi)
 
 
+def _cp_bounds(x: float, n: float, level: float) -> tuple[float, float]:
+    """Clopper-Pearson bounds for ``x`` successes in ``n`` trials (both may be fractional).
+
+    lo = Beta^-1(alpha/2; x, n-x+1) (0 when x <= 0), hi = Beta^-1(1-alpha/2; x+1, n-x)
+    (1 when x >= n), using the closed forms (alpha/2)^(1/n) at x = n and 1 - (alpha/2)^(1/n) at
+    x = 0. The beta quantiles are found by bisection on :func:`regularized_beta`, which accepts
+    non-integer parameters, so the same formula serves the Korn-Graubard interval.
+    """
+    alpha = 1.0 - level
+    if x <= 0.0:
+        return 0.0, 1.0 - (alpha / 2.0) ** (1.0 / n)
+    if x >= n:
+        return (alpha / 2.0) ** (1.0 / n), 1.0
+    return _beta_ppf(alpha / 2.0, x, n - x + 1.0), _beta_ppf(1.0 - alpha / 2.0, x + 1.0, n - x)
+
+
 def clopper_pearson(k: int, n: int, level: float = 0.95) -> Estimate:
     """Exact (Clopper-Pearson) binomial interval.
 
@@ -368,21 +387,18 @@ def clopper_pearson(k: int, n: int, level: float = 0.95) -> Estimate:
     _check_kn(k, n)
     if n == 0:
         return Estimate(None, 0.0, 1.0, 0, "clopper-pearson", level)
-    alpha = 1.0 - level
-    if k == 0:
-        lo = 0.0
-        hi = 1.0 - (alpha / 2.0) ** (1.0 / n)
-    elif k == n:
-        lo = (alpha / 2.0) ** (1.0 / n)
-        hi = 1.0
-    else:
-        lo = _beta_ppf(alpha / 2.0, k, n - k + 1)
-        hi = _beta_ppf(1.0 - alpha / 2.0, k + 1, n - k)
+    lo, hi = _cp_bounds(float(k), float(n), level)
     return Estimate(k / n, lo, hi, n, "clopper-pearson", level)
 
 
+WEIGHTED_METHODS = ("korn-graubard", "wilson")
+
+
 def weighted_proportion(
-    ys: Sequence[bool], weights: Sequence[float], level: float = 0.95
+    ys: Sequence[bool],
+    weights: Sequence[float],
+    level: float = 0.95,
+    method: str = "korn-graubard",
 ) -> Estimate:
     """Hajek (ratio) estimate of a population proportion from an unequal-probability sample.
 
@@ -395,16 +411,30 @@ def weighted_proportion(
     * Kish effective n n_kish = (sum w)^2 / sum(w^2)
     * variance-matched effective n n_lin = p(1-p)/v  (when 0 < p < 1 and v > 0)
 
-    The interval is the Wilson score interval evaluated at p with n_eff = min(n_kish, n_lin)
-    (n_kish alone when p is 0 or 1). Using Wilson keeps the bounds inside [0, 1] and behaves well
-    near 0; taking the smaller of the two effective sizes accounts both for the dispersion of the
-    weights (Kish) and for errors concentrated in heavily weighted units (linearisation), which
-    Kish's formula ignores. With equal weights n_kish = n_lin = n, so the result coincides with
-    ``wilson(sum(y), n)``. ``Estimate.n_eff`` reports the effective size actually used.
+    The effective size is n_eff = min(n_kish, n_lin) (n_kish alone when p is 0 or 1): the
+    smaller of the two accounts both for the dispersion of the weights (Kish) and for errors
+    concentrated in heavily weighted units (linearisation), which Kish's formula ignores.
+    ``Estimate.n_eff`` reports it.
+
+    ``method`` picks the interval evaluated at (p, n_eff):
+
+    * ``"korn-graubard"`` (default, ``Estimate.method == "hajek-korn-graubard"``): the
+      Clopper-Pearson interval with the non-integer count x_eff = p * n_eff out of n_eff
+      (Korn & Graubard 1998, without their degrees-of-freedom adjustment), computed with the
+      regularized incomplete beta. It is conservative where Wilson under-covers: with a few
+      heavily weighted audits in a low-pi stratum the Hajek estimate is skewed and the Wilson
+      interval misses on the high side (simulated coverage 0.87 at 95%).
+    * ``"wilson"`` (``"hajek-wilson"``): the Wilson score interval at (p, n_eff); narrower.
+
+    With equal weights n_kish = n_lin = n, so the result coincides with
+    ``clopper_pearson(sum(y), n)`` (``wilson(sum(y), n)`` for method "wilson").
 
     Weights must be finite and > 0. Empty input returns the vacuous interval.
     """
     level = _check_level(level)
+    if method not in WEIGHTED_METHODS:
+        raise ValueError(f"method must be one of {WEIGHTED_METHODS}, got {method!r}")
+    name = f"hajek-{method}"
     y = [_as_label(v) for v in ys]
     w = [_as_finite("weight", v) for v in weights]
     if len(y) != len(w):
@@ -413,26 +443,33 @@ def weighted_proportion(
         raise ValueError("weights must be > 0")
     n = len(y)
     if n == 0:
-        return Estimate(None, 0.0, 1.0, 0, "hajek-wilson", level, n_eff=0.0)
+        return Estimate(None, 0.0, 1.0, 0, name, level, n_eff=0.0)
     k = sum(y)
     if all(v == w[0] for v in w):
         # Equal weights: the Hajek estimator is exactly the sample proportion.
-        lo, hi = _wilson_bounds(k / n, float(n), z_for(level))
-        return Estimate(k / n, lo, hi, n, "hajek-wilson", level, n_eff=float(n))
-    sw = math.fsum(w)
-    sw2 = math.fsum(v * v for v in w)
-    p = math.fsum(wi for wi, yi in zip(w, y, strict=True) if yi) / sw
-    p = min(1.0, max(0.0, p))
-    n_kish = sw * sw / sw2
-    n_eff = n_kish
-    if 0.0 < p < 1.0:
-        var = math.fsum(
-            wi * wi * ((1.0 if yi else 0.0) - p) ** 2 for wi, yi in zip(w, y, strict=True)
-        ) / (sw * sw)
-        if var > 0.0:
-            n_eff = min(n_kish, p * (1.0 - p) / var)
-    lo, hi = _wilson_bounds(p, n_eff, z_for(level))
-    return Estimate(p, lo, hi, n, "hajek-wilson", level, n_eff=n_eff)
+        p, n_eff = k / n, float(n)
+    else:
+        sw = math.fsum(w)
+        sw2 = math.fsum(v * v for v in w)
+        p = math.fsum(wi for wi, yi in zip(w, y, strict=True) if yi) / sw
+        p = min(1.0, max(0.0, p))
+        n_eff = sw * sw / sw2
+        if 0.0 < p < 1.0:
+            var = math.fsum(
+                wi * wi * ((1.0 if yi else 0.0) - p) ** 2 for wi, yi in zip(w, y, strict=True)
+            ) / (sw * sw)
+            if var > 0.0:
+                n_eff = min(n_eff, p * (1.0 - p) / var)
+    lo, hi = weighted_bounds(p, n_eff, level, method)
+    return Estimate(p, lo, hi, n, name, level, n_eff=n_eff)
+
+
+def weighted_bounds(p: float, n_eff: float, level: float, method: str) -> tuple[float, float]:
+    """Interval bounds of :func:`weighted_proportion` at proportion ``p`` and effective size
+    ``n_eff`` (> 0); ``method`` is "korn-graubard" or "wilson". Used for sample-size planning."""
+    if method == "wilson":
+        return _wilson_bounds(p, n_eff, z_for(level))
+    return _cp_bounds(p * n_eff, n_eff, level)
 
 
 def required_n(p: float, half_width: float, level: float = 0.95) -> int:

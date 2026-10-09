@@ -226,11 +226,38 @@ def test_two_tier_baselines():
 
 
 def test_oracle_pays_only_chosen_tier():
+    # t4 has no correct tier: the oracle serves the cheapest tier (cost 1), not the last one.
     o = sweep(example2(), holdout=0).baselines["oracle"]
     assert o.accuracy.value == 0.75
-    assert o.cost_per_task == pytest.approx((1 + 10 + 1 + 10) / 4)
-    assert o.tier_share == (0.5, 0.5)
-    assert o.escalation_rate == 0.5
+    assert o.cost_per_task == pytest.approx((1 + 10 + 1 + 1) / 4)
+    assert o.tier_share == (0.75, 0.25)
+    assert o.escalation_rate == 0.25
+
+
+def test_oracle_serves_cheapest_tier_when_none_correct():
+    d = make_decision(
+        "x",
+        [
+            {"name": "a", "score": 0.5, "ok": False, "cost": 5.0},
+            {"name": "b", "score": 0.5, "ok": False, "cost": 2.0},
+            {"name": "c", "ok": False, "cost": 9.0},
+        ],
+    )
+    o = sweep([d], holdout=0).baselines["oracle"]
+    assert o.accuracy.value == 0.0
+    assert o.cost_per_task == 2.0 and o.tier_share == (0.0, 1.0, 0.0)
+
+
+@pytest.mark.parametrize("make", [example2, example3])
+def test_oracle_cost_is_lower_bound_at_its_accuracy(make):
+    res = sweep(make(), grid=[0.0, 0.3, 0.5, 0.7, 0.9, NEVER_ACCEPT], holdout=0)
+    o = res.baselines["oracle"]
+    assert o.cost_per_task is not None
+    rivals = [*res.points, *(b for k, b in res.baselines.items() if k != "oracle")]
+    for p in rivals:
+        assert p.accuracy.value <= o.accuracy.value
+        if p.accuracy.value == o.accuracy.value and p.cost_per_task is not None:
+            assert p.cost_per_task >= o.cost_per_task - 1e-12
 
 
 def test_oracle_picks_cheapest_correct_tier_by_cost():

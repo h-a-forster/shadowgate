@@ -30,10 +30,11 @@ Semantics
   ``point`` is evaluated on the selection split and ``holdout`` on the held-out split.
 * **Baselines.** ``"only:<tier>"`` always serves from that tier and pays only that tier's
   completion (no confidence calls). ``"oracle"`` serves from the cheapest tier whose answer is
-  correct (by that tier's completion cost; unknown costs rank last, ties go to the earlier tier),
-  or the last tier when none is; it pays only the chosen tier's completion, never the tiers it
-  skipped, so its cost is a lower bound no real router can reach. Baselines have empty
-  ``thresholds``.
+  correct (by that tier's completion cost; unknown costs rank last, ties go to the earlier tier);
+  when no tier is correct it serves the cheapest tier (same ranking), since any answer is wrong
+  anyway. It pays only the chosen tier's completion, never the tiers it skipped, so it has the
+  highest accuracy any router over these tiers can reach and its cost is a lower bound on the
+  cost of reaching that accuracy (no real router can). Baselines have empty ``thresholds``.
 """
 
 from __future__ import annotations
@@ -497,14 +498,20 @@ def _oracle(items: Sequence[_Item], n_tiers: int, level: float) -> OperatingPoin
     cost: float | None = 0.0
     latency = 0.0
     for it in items:
+
+        def rank(t: int, it: _Item = it) -> tuple[float, int]:
+            c = it.base_cost[t]
+            return (math.inf if c is None else c, t)
+
         ok = [j for j in range(n_tiers) if it.correct[j]]
         if ok:
-            j = min(ok, key=lambda t: (math.inf if it.base_cost[t] is None else it.base_cost[t], t))
+            j = min(ok, key=rank)
             correct += 1
             if j < n_tiers - 1:
                 correct_skipped += 1
         else:
-            j = n_tiers - 1
+            # No tier is correct: serve the cheapest (the answer is wrong whichever is served).
+            j = min(range(n_tiers), key=rank)
         served[j] += 1
         c = it.base_cost[j]
         cost = None if cost is None or c is None else cost + c

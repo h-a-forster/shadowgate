@@ -554,3 +554,21 @@ def test_write_report_explicit_fmt_and_errors(tmp_path: Path, eval_run) -> None:
         write_report(tmp_path / "report", s)
     with pytest.raises(ValueError, match="unknown report format"):
         write_report(tmp_path / "r.html", s, fmt="docx")
+
+
+def test_html_inconclusive_needing_tasks_not_audits(eval_run) -> None:
+    s, _ = eval_run
+    doc = render_html(
+        dataclasses.replace(s, status="inconclusive", audits_to_resolve=None, tasks_to_resolve=37),
+        now=NOW,
+    )
+    assert "More audits cannot help" in doc and "more tasks are needed" in doc
+    assert "37 more skipped cases" in doc
+    assert "more audits would resolve" not in doc
+
+
+def test_methodology_mentions_nonresponse_kg_and_optional_stopping(eval_run) -> None:
+    s, _ = eval_run
+    doc = render_html(s, now=NOW)
+    for phrase in ("missing at random", "Korn-Graubard", "fixed-sample", "stricter confidence"):
+        assert phrase in doc

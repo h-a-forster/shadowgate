@@ -100,11 +100,20 @@ METHODOLOGY = (
     "answers every task, so every skipped case is observed (π = 1). The audit tier is a "
     "proxy, not ground truth: disagreement counts differences from its answers, not verified "
     "errors, unless reference answers exist, in which case the error rate against them is "
-    "reported as well. Intervals are Wilson score intervals for unweighted proportions and "
-    "Hajek-Wilson intervals at the effective sample size n_eff = (Σw)²/Σw² "
-    "for weighted ones; the savings interval reflects only the uncertainty in the cost of always "
-    "using the reference tier. Sweep accuracies are Wilson intervals; recommended thresholds are "
-    "chosen on a selection split and re-evaluated on a held-out split."
+    "reported as well. Audits that are pending, failed or undecided are treated as "
+    "nonresponse: within each inclusion-probability stratum, completed audits are up-weighted "
+    "by the inverse of the stratum's response rate, which assumes audits are missing at random "
+    "within their stratum; strata without any completed audit cannot be represented and are "
+    "excluded from the estimate (a caveat says so). Intervals are Wilson score intervals for "
+    "unweighted proportions and Korn-Graubard intervals (Clopper-Pearson at the effective sample "
+    "size n_eff) for weighted ones; when a stratum holding at least 10% of the skipped cases has "
+    "fewer than 10 completed audits, the status is never reported as ok. The status uses a "
+    "fixed-sample interval: checking it repeatedly as audits accumulate and stopping at the "
+    "first ok inflates the chance of a false ok, so fix the number of audits in advance or use a "
+    "stricter confidence level for repeated checks. The savings interval reflects only the "
+    "uncertainty in the cost of always using the reference tier. Sweep accuracies are Wilson "
+    "intervals; recommended thresholds are chosen on a selection split and re-evaluated on a "
+    "held-out split."
 )
 
 
@@ -310,10 +319,17 @@ def _status_parts(summary: AuditSummary) -> tuple[str, str]:
         )
     elif status == "inconclusive":
         why = f"The interval for skipped-case {name} straddles tolerance {tol}."
+        tasks = summary.tasks_to_resolve
         if summary.audits_to_resolve:
             why += (
                 f" About {fmt_count(summary.audits_to_resolve)} more audits would resolve it "
                 "if the rate holds."
+            )
+        elif tasks:
+            why += (
+                " More audits cannot help (every skipped case is already graded or audited); "
+                f"more tasks are needed to resolve it: about {fmt_count(tasks)} more skipped "
+                "cases if the rate holds."
             )
     elif status == "no-data":
         why = "No completed audits or graded skipped cases, so the skipped-case rate is unknown."

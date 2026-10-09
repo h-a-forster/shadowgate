@@ -325,9 +325,12 @@ class Estimate:
 
 def wilson(k: int, n: int, level=0.95) -> Estimate
 def clopper_pearson(k: int, n: int, level=0.95) -> Estimate         # exact; implement beta quantile via bisection on regularized incomplete beta
-def weighted_proportion(ys: Sequence[bool], weights: Sequence[float], level=0.95) -> Estimate
-    # Hajek ratio estimator; linearised variance; Kish effective n; CI = Wilson interval at n_eff
-    # (keeps CI in [0,1]); equals wilson() when weights are equal
+def weighted_proportion(ys: Sequence[bool], weights: Sequence[float], level=0.95,
+                        method="korn-graubard") -> Estimate
+    # Hajek ratio estimator; linearised variance; n_eff = min(Kish, variance-matched);
+    # CI = Korn-Graubard (Clopper-Pearson with x = p*n_eff of n_eff, non-integer, via the
+    # regularized incomplete beta; equals clopper_pearson() when weights are equal) or
+    # method="wilson" (Wilson at n_eff; equals wilson() when weights are equal)
 def mean_ci(xs, level=0.95) -> Estimate                               # t-free normal approx + n
 def bootstrap_ci(stat: Callable[[Sequence[int]], float], n: int, *, reps=2000, level=0.95, seed=0) -> tuple[float, float]
     # resamples indices; stat receives index list; percentile interval
@@ -372,14 +375,29 @@ class AuditSummary:
     est_savings: Estimate | None                  # 1 - serving / all-slow
     tolerance: float | None
     status: str                          # "ok" | "breach" | "inconclusive" | "no-data"
-    audits_to_resolve: int | None        # extra audits for CI to clear tolerance, if inconclusive
+    audits_to_resolve: int | None        # extra audits for CI to clear tolerance, if inconclusive;
+                                         # None when audits cannot help (status uses skipped_error,
+                                         # or every skipped case is audited, π = 1)
     notes: list[str]                     # human-readable caveats (e.g. "audit tier is not ground truth")
+    n_unrepresented: int                 # skipped cases in π strata with no completed audit (excluded)
+    sparse_strata: int                   # π strata with >= 10% of skipped cases and < 10 audits
+    tasks_to_resolve: int | None         # extra skipped cases for CI to clear tolerance, if inconclusive
 
 def summarize(decisions: Iterable[Decision], *, tolerance: float | None = None,
               bins: Sequence[float] = (0, .5, .7, .8, .9, .95, 1.0), level=0.95) -> AuditSummary
 ```
 Status uses `disagreement` (or `skipped_error` when references exist for every skipped case):
-`breach` if lo > tolerance, `ok` if hi <= tolerance, else `inconclusive`.
+`breach` if lo > tolerance, `ok` if hi <= tolerance, else `inconclusive`. Weights are
+1/(π·r_h), where r_h = completed-and-decided audits / selected audits in the case's π stratum
+(strata = distinct π values, or 5 quantile groups of π when there are more than 10 distinct
+values): pending, failed and undecided audits are nonresponse, assumed missing at random *within*
+their stratum. A stratum with no completed audit cannot be represented: it is excluded from the
+estimate's target and counted in `n_unrepresented`. If the skipped cases span several strata and
+one holding >= 10% of them has < 10 completed audits, `ok` is downgraded to `inconclusive` (a rule
+that depends only on the design and the audit counts, never on outcomes). The status uses a
+fixed-sample interval: checking repeatedly and stopping at the first `ok` inflates false `ok`
+(simulated 2.4% -> 12.2% when checking every 50 audits), so fix the number of audits in advance or
+use a stricter `level` (e.g. 0.99) for repeated checks.
 Works for eval-mode runs too: there every non-final attempt already has `agreement`, so every
 skipped case is "audited" with π = 1.
 

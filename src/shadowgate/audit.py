@@ -5,8 +5,9 @@ number is the skipped-case disagreement rate: among decisions answered by a non-
 without escalation ("skipped" cases), the share whose answer differs from the reference (audit)
 tier. In serve mode only a sample of skipped cases is shadow-audited, each with a known
 inclusion probability pi, so the rate is a Hajek (inverse-probability weighted) estimate with
-weights 1/pi. In eval mode every tier answers every task, so every skipped case is observed
-(pi = 1).
+weights 1/(pi * r_h), where r_h is the audit response rate of the case's pi stratum (see
+"Nonresponse" below). In eval mode every tier answers every task, so every skipped case is
+observed (pi = 1).
 
 Conventions
 -----------
@@ -23,14 +24,46 @@ Conventions
 * **Serve-mode audit states.** For each skipped case: ``shadow.status == "done"`` with a decided
   agreement -> audited; "done" with ``equivalent=None`` -> ``n_undecided``; "pending" ->
   ``n_pending``; "error" -> ``n_audit_errors``; "skipped" -> not selected (its pi still matters);
-  no ShadowResult at all (audit off) -> ``n_no_audit_record``. Non-audited states are excluded
-  from the estimate; this is unbiased only if they are missing at random given pi (see notes).
+  no ShadowResult at all (audit off) -> ``n_no_audit_record``.
+* **Pi strata.** Skipped cases with a valid pi are grouped by their recorded pi value (rounded to
+  6 decimals). When there are more than ``MAX_PI_STRATA`` distinct values (pi computed from a
+  continuous score), they are instead split into ``PI_QUANTILE_GROUPS`` groups of about equal
+  size by the quantiles of pi (equal pi values are never split across groups).
+* **Nonresponse.** A *selected* case is one with a valid pi whose audit was attempted (state
+  audited, undecided, pending or error; in eval mode every skipped case). Its stratum's response
+  rate is r_h = completed-and-decided audits / selected cases, and each completed audit gets
+  weight 1/(pi_i * r_h), so completed audits stand in for pending, failed and undecided ones of
+  the same stratum. This is unbiased only if audits are missing at random *within* each pi
+  stratum (a pending audit is no more or less likely to disagree than a completed one with the
+  same pi); response rates may differ across strata. The unadjusted 1/pi weights would instead
+  bias the estimate whenever response rates differ across strata.
+* **Unrepresented strata.** A stratum with no completed, decided audit (r_h = 0, or nothing
+  selected) cannot be represented: its cases are counted in ``n_unrepresented`` and excluded from
+  the estimate's target, which then covers only the represented strata (a note gives the share).
+  Such a stratum also triggers the sparse-stratum rule below when it is large.
+* **Sparse strata.** For each stratum the expected number of audits (sum of pi over its cases)
+  and its share of the skipped population are computed. If a stratum holding at least
+  ``SPARSE_SHARE`` of the skipped cases has fewer than ``SPARSE_MIN_AUDITS`` completed audits, a
+  note is added and an ``ok`` status from the disagreement is downgraded to ``inconclusive``
+  (``sparse_strata`` counts such strata). The rule depends only on the design and on how many
+  audits completed, never on the observed outcomes, so it cannot be gamed by the data.
 * **Eval mode.** The served attempt's ``agreement`` (vs the last tier) is the audit, pi = 1. A
   missing agreement because the last tier failed counts as an audit error.
 * **Status.** ``skipped_error`` drives the status when every skipped case is graded against a
   reference; otherwise ``disagreement`` does. ``breach`` if lo > tolerance, ``ok`` if
   hi <= tolerance, else ``inconclusive``; ``no-data`` when the metric has no observations;
-  ``n/a`` when no tolerance is given.
+  ``n/a`` when no tolerance is given. The weighted interval is Korn-Graubard (Clopper-Pearson at
+  the effective sample size, see :func:`~shadowgate.stats.weighted_proportion`).
+* **Fixed-sample status.** The status uses a fixed-sample confidence interval. Checking it
+  repeatedly as audits accumulate and stopping at the first ``ok`` (optional stopping) inflates
+  the chance of a false ``ok``: in simulation a 2.4 % false-ok rate at a single look became
+  12.2 % when checking every 50 audits. Fix the number of audits in advance, or use a stricter
+  ``level`` (e.g. 0.99) when the status is checked repeatedly.
+* **Resolving an inconclusive status.** ``audits_to_resolve`` estimates the additional audits
+  needed if the rate holds. It is None when more audits cannot help: when the status uses
+  ``skipped_error`` (every skipped case is already graded) or every skipped case is already
+  audited (pi = 1). ``tasks_to_resolve`` estimates the additional skipped cases (tasks accepted by
+  the fast path) needed in every inconclusive case, at the current audit rate.
 * **Confidence bins.** Edges ``bins`` define half-open bins ``[e_i, e_{i+1})``; the last bin is
   closed. Scores below the first edge fall into the first bin, scores above the last edge into
   the last bin. Skipped cases without a score (None/NaN, only possible with hand-built records)
@@ -45,13 +78,25 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from shadowgate.stats import Estimate, mean_ci, weighted_proportion, wilson, z_for
+from shadowgate.stats import (
+    Estimate,
+    mean_ci,
+    regularized_beta,
+    weighted_bounds,
+    weighted_proportion,
+    wilson,
+    z_for,
+)
 from shadowgate.types import Attempt, Decision
 
 __all__ = ["AuditSummary", "BinSummary", "infer_tier_order", "summarize"]
 
 DEFAULT_BINS: tuple[float, ...] = (0.0, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0)
 LOW_N_EFF = 30.0  # effective sample size below which a note is added
+MAX_PI_STRATA = 10  # more distinct pi values than this -> quantile groups
+PI_QUANTILE_GROUPS = 5
+SPARSE_SHARE = 0.10  # a stratum with at least this share of skipped cases ...
+SPARSE_MIN_AUDITS = 10  # ... and fewer completed audits blocks an "ok" status
 TINY_PI = 0.05  # inclusion probabilities below this are flagged when few audits back them
 MIN_AUDITS_PER_STRATUM = 5
 HEAVY_WEIGHT_SHARE = 0.2  # one audit carrying more than this share of the total weight
@@ -121,6 +166,9 @@ class AuditSummary:
     expected_wrong_source: str | None = None  # "skipped_error" | "disagreement" | None
     no_score_bin: BinSummary | None = None  # skipped cases without a confidence score
     level: float = 0.95
+    n_unrepresented: int = 0  # skipped cases in pi strata without a completed audit (excluded)
+    sparse_strata: int = 0  # large pi strata with too few completed audits ("ok" is blocked)
+    tasks_to_resolve: int | None = None  # extra skipped cases to resolve "inconclusive"
 
 
 # --------------------------------------------------------------------------- tier order
@@ -199,6 +247,66 @@ class _Case:
     disagree: bool | None = None
     wrong: bool | None = None  # served answer vs reference
     ref_wrong: bool | None = None  # audit tier's answer vs reference (audited cases only)
+    weight: float | None = None  # 1/(pi * r_h) for audited cases in represented strata
+
+
+_SELECTED = frozenset({"audited", "undecided", "pending", "error", "none"})
+
+
+@dataclass
+class _Stratum:
+    label: str
+    members: list[_Case]
+    n_selected: int
+    n_completed: int
+    expected_audits: float  # sum of pi over members
+
+    @property
+    def response_rate(self) -> float | None:
+        return self.n_completed / self.n_selected if self.n_selected else None
+
+
+def _pi_strata(cases: Sequence[_Case]) -> list[_Stratum]:
+    """Group cases with a valid pi into strata and set each completed audit's weight.
+
+    Strata are the distinct pi values (rounded to 6 decimals), or ``PI_QUANTILE_GROUPS``
+    quantile groups of pi when there are more than ``MAX_PI_STRATA`` distinct values. A case with
+    a valid pi is "selected" when its audit was attempted (eval-mode cases always are; a serve-mode
+    "none" case has no pi). Completed audits get weight 1/(pi * r_h), r_h = completed / selected.
+    """
+    valid = [c for c in cases if c.pi is not None]
+    by_key: dict[float, list[_Case]] = {}
+    for c in valid:
+        assert c.pi is not None
+        by_key.setdefault(round(c.pi, 6), []).append(c)
+    keys = sorted(by_key)
+    groups: list[tuple[str, list[_Case]]]
+    if len(keys) <= MAX_PI_STRATA:
+        groups = [(f"pi = {k:g}", by_key[k]) for k in keys]
+    else:
+        total = len(valid)
+        buckets: list[list[float]] = [[] for _ in range(PI_QUANTILE_GROUPS)]
+        before = 0
+        for k in keys:
+            buckets[min(PI_QUANTILE_GROUPS - 1, PI_QUANTILE_GROUPS * before // total)].append(k)
+            before += len(by_key[k])
+        groups = [
+            (f"pi in [{b[0]:g}, {b[-1]:g}]", [c for k in b for c in by_key[k]])
+            for b in buckets
+            if b
+        ]
+    out: list[_Stratum] = []
+    for label, members in groups:
+        n_sel = sum(1 for c in members if c.state in _SELECTED)
+        done = [c for c in members if c.state == "audited"]
+        if done:
+            r = len(done) / n_sel
+            for c in done:
+                assert c.pi is not None
+                c.weight = 1.0 / (c.pi * r)
+        expected = math.fsum(c.pi for c in members if c.pi is not None)
+        out.append(_Stratum(label, members, n_sel, len(done), expected))
+    return out
 
 
 def _weighted_mean(xs: Sequence[float], ws: Sequence[float], level: float) -> Estimate | None:
@@ -240,10 +348,10 @@ def _bin_of(score: float, edges: Sequence[float]) -> int:
 def _bin_summary(
     lo: float, hi: float, label: str, cases: Sequence[_Case], level: float
 ) -> BinSummary:
-    audited = [c for c in cases if c.state == "audited"]
+    audited = [c for c in cases if c.state == "audited" and c.weight is not None]
     graded = [c for c in cases if c.wrong is not None]
     dis = weighted_proportion(
-        [bool(c.disagree) for c in audited], [1.0 / c.pi for c in audited if c.pi], level
+        [bool(c.disagree) for c in audited], [c.weight for c in audited if c.weight], level
     )
     err = wilson(sum(1 for c in graded if c.wrong), len(graded), level) if graded else None
     return BinSummary(lo, hi, len(cases), len(audited), dis, err, label, len(graded))
@@ -253,41 +361,54 @@ def _fmt_edge(x: float) -> str:
     return f"{x:.2f}"
 
 
-def _wilson_clears(p: float, n: float, z: float, tolerance: float) -> bool:
-    """Whether the Wilson interval at proportion p and (effective) size n excludes tolerance
-    on the side of p (lo > tolerance when p > tolerance, hi <= tolerance when p < tolerance)."""
-    z2 = z * z
-    denom = 1.0 + z2 / n
-    centre = (p + z2 / (2.0 * n)) / denom
-    half = z / denom * math.sqrt(max(p * (1.0 - p) / n + z2 / (4.0 * n * n), 0.0))
+def _interval_family(est: Estimate) -> str:
+    return "wilson" if est.method.endswith("wilson") else "korn-graubard"
+
+
+def _clears(p: float, m: float, tolerance: float, level: float, family: str) -> bool:
+    """Whether the interval of ``family`` at proportion p and (effective) size m excludes the
+    tolerance on the side of p (lo > tolerance when p > tolerance, hi <= tolerance otherwise)."""
+    if family == "wilson":
+        lo, hi = weighted_bounds(p, m, level, family)
+        return lo > tolerance if p > tolerance else hi <= tolerance
+    # Clopper-Pearson at x = p m: lo > t  <=>  I_t(x, m-x+1) < alpha/2 and
+    # hi <= t  <=>  I_t(x+1, m-x) >= 1 - alpha/2 (one incomplete-beta call, no quantile search).
+    half_alpha = (1.0 - level) / 2.0
+    x = p * m
     if p > tolerance:
-        return centre - half > tolerance
-    return centre + half <= tolerance
+        if x >= m:
+            return half_alpha ** (1.0 / m) > tolerance
+        return regularized_beta(tolerance, x, m - x + 1.0) < half_alpha
+    if x <= 0.0:
+        return 1.0 - half_alpha ** (1.0 / m) <= tolerance
+    if tolerance >= 1.0:
+        return True
+    return regularized_beta(tolerance, x + 1.0, m - x) >= 1.0 - half_alpha
 
 
-def _audits_to_resolve(est: Estimate, tolerance: float, level: float) -> int | None:
+def _extra_to_resolve(est: Estimate, tolerance: float, level: float) -> int | None:
     """Extra observations for the interval to clear ``tolerance``, assuming p stays put.
 
-    Finds the smallest effective size m at which the Wilson interval around the current point
-    estimate excludes the tolerance (the same interval family that is reported; unlike the Wald
-    planning formula of :func:`~shadowgate.stats.required_n` it handles p near 0 or 1 and the
-    interval's asymmetry). m is converted to audits with the current design effect n / n_eff,
-    assumed constant as audits are added (new audits drawn under the same sampling design).
-    Returns None when p equals the tolerance or more than 10^7 audits would be needed.
+    Finds the smallest effective size m at which the interval family that is reported (Wilson,
+    or Clopper-Pearson / Korn-Graubard) around the current point estimate excludes the tolerance;
+    unlike the Wald planning formula of :func:`~shadowgate.stats.required_n` this handles p near
+    0 or 1 and the interval's asymmetry. m is converted to observations with the current design
+    effect n / n_eff, assumed constant as observations are added (drawn under the same design).
+    Returns None when p equals the tolerance or more than 10^7 observations would be needed.
     """
     p = est.value
     if p is None or p == tolerance:
         return None
-    z = z_for(level)
+    family = _interval_family(est)
     cap = 1e7
     lo, hi = 0.5, 1.0
-    while not _wilson_clears(p, hi, z, tolerance):
+    while not _clears(p, hi, tolerance, level, family):
         hi *= 2.0
         if hi > cap:
             return None
     while hi - lo > 1e-3 * hi:
         mid = (lo + hi) / 2.0
-        if _wilson_clears(p, mid, z, tolerance):
+        if _clears(p, mid, tolerance, level, family):
             hi = mid
         else:
             lo = mid
@@ -443,7 +564,9 @@ def summarize(
     states = Counter(c.state for c in cases)
     audited = [c for c in cases if c.state == "audited"]
     n_audited = len(audited)
-    weights = [1.0 / c.pi for c in audited if c.pi]
+    pi_strata = _pi_strata(cases)  # sets c.weight = 1/(pi * r_h) on completed audits
+    weights = [c.weight for c in audited if c.weight is not None]
+    assert len(weights) == n_audited  # a stratum with a completed audit is always represented
 
     disagreement: Estimate | None = None
     disagreement_unweighted: Estimate | None = None
@@ -453,7 +576,9 @@ def summarize(
         disagreement = weighted_proportion(ys, weights, level)
         disagreement_unweighted = wilson(sum(ys), len(ys), level)
         ref_graded = [
-            (c.ref_wrong, 1.0 / c.pi) for c in audited if c.ref_wrong is not None and c.pi
+            (c.ref_wrong, c.weight)
+            for c in audited
+            if c.ref_wrong is not None and c.weight is not None
         ]
         if ref_graded:
             audit_tier_error = weighted_proportion(
@@ -496,8 +621,10 @@ def summarize(
     for count, what in excluded:
         if count:
             notes.append(
-                f"{count} audit(s) {what} were excluded; if they differ systematically from "
-                "completed audits the disagreement estimate is biased."
+                f"{count} audit(s) {what} were treated as nonresponse: completed audits of the "
+                "same inclusion-probability stratum are up-weighted to stand in for them. This "
+                "assumes they are missing at random within their stratum; if they differ "
+                "systematically from completed audits there, the disagreement estimate is biased."
             )
     if states["none"]:
         notes.append(
@@ -532,6 +659,29 @@ def summarize(
                 f"audit(s) completed there; each carries weight {1 / pi:.0f}, so the estimate "
                 "is sensitive to them."
             )
+    n_pi = sum(len(st.members) for st in pi_strata)
+    unrepresented = [st for st in pi_strata if st.n_completed == 0]
+    n_unrepresented = sum(len(st.members) for st in unrepresented)
+    if n_unrepresented and n_audited:
+        notes.append(
+            f"{n_unrepresented} skipped case(s) ({n_unrepresented / n_pi:.0%} of those with an "
+            "inclusion probability) lie in strata with no completed audit ("
+            + ", ".join(st.label for st in unrepresented)
+            + "); they cannot be represented, so the disagreement estimate covers only the "
+            "remaining skipped cases."
+        )
+    sparse: list[_Stratum] = []
+    if len(pi_strata) >= 2:
+        for st in pi_strata:
+            share = len(st.members) / n_pi
+            if share >= SPARSE_SHARE and st.n_completed < SPARSE_MIN_AUDITS:
+                sparse.append(st)
+                notes.append(
+                    f"Stratum {st.label} holds {share:.0%} of the skipped cases but has only "
+                    f"{st.n_completed} completed audit(s) (about {st.expected_audits:.1f} "
+                    f"expected by design); the weighted interval's coverage is unreliable, so "
+                    f"the status is never 'ok' with fewer than {SPARSE_MIN_AUDITS} there."
+                )
     if len(weights) >= 2 and max(weights) / math.fsum(weights) > HEAVY_WEIGHT_SHARE:
         notes.append(
             f"A single audit carries {max(weights) / math.fsum(weights):.0%} of the total "
@@ -554,6 +704,7 @@ def summarize(
     else:
         metric_name, metric = None, None
     audits_to_resolve: int | None = None
+    tasks_to_resolve: int | None = None
     if metric is None or metric.value is None:
         status = "no-data"
         metric_name = None
@@ -563,11 +714,23 @@ def summarize(
         assert metric.lo is not None and metric.hi is not None
         if metric.lo > tolerance:
             status = "breach"
-        elif metric.hi <= tolerance:
+        elif metric.hi <= tolerance and not (metric_name == "disagreement" and sparse):
             status = "ok"
         else:
             status = "inconclusive"
-            audits_to_resolve = _audits_to_resolve(metric, float(tolerance), level)
+            extra = _extra_to_resolve(metric, float(tolerance), level)
+            if extra is not None and metric.n > 0:
+                # Each extra skipped case yields metric.n / n_skipped observations at the
+                # current audit (or grading) rate.
+                tasks_to_resolve = math.ceil(extra * n_skipped / metric.n - 1e-9)
+            census = all(c.pi is not None and c.pi >= 1.0 for c in cases)
+            if metric_name == "disagreement" and not census:
+                audits_to_resolve = extra
+            if metric.hi <= tolerance:
+                notes.append(
+                    "The interval is below tolerance, but the status is held at 'inconclusive' "
+                    "because a large stratum has too few completed audits (see above)."
+                )
 
     # ---- expected wrong-but-kept answers
     expected_wrong: tuple[float, float, float] | None = None
@@ -712,6 +875,9 @@ def summarize(
         expected_wrong_source=wrong_source,
         no_score_bin=no_score_bin,
         level=level,
+        n_unrepresented=n_unrepresented,
+        sparse_strata=len(sparse),
+        tasks_to_resolve=tasks_to_resolve,
     )
 
 
