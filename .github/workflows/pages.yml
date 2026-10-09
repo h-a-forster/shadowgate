@@ -1,0 +1,118 @@
+# Publishes the offline demo report and any committed result reports to GitHub Pages.
+# One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # setup-uv no longer publishes floating major tags; Dependabot keeps this pin current.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        run: uv build --wheel
+      - name: Install wheel into a fresh venv
+        run: |
+          uv venv "$RUNNER_TEMP/site-venv"
+          uv pip install --python "$RUNNER_TEMP/site-venv/bin/python" dist/*.whl
+      - name: Run offline demo
+        run: |
+          mkdir -p site
+          "$RUNNER_TEMP/site-venv/bin/shadowgate" demo --out site/demo --quiet
+          test -f site/demo/report.html
+          # Keep only the reports; the ledger and inputs are reproducible with `shadowgate demo`.
+          rm -f site/demo/ledger.sqlite site/demo/ledger.sqlite-wal site/demo/ledger.sqlite-shm
+      - name: Copy result reports
+        run: |
+          shopt -s nullglob
+          files=(docs/results/*.html)
+          if [ ${#files[@]} -gt 0 ]; then
+            mkdir -p site/results
+            cp "${files[@]}" site/results/
+          fi
+      - name: Write index
+        run: |
+          version=$("$RUNNER_TEMP/site-venv/bin/shadowgate" --version)
+          results=""
+          if [ -d site/results ]; then
+            for f in site/results/*.html; do
+              name=$(basename "$f")
+              results="$results<li><a href=\"results/$name\">$name</a></li>"
+            done
+          else
+            results="<li>No published results yet.</li>"
+          fi
+          cat > site/index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>shadowgate</title>
+          <style>
+          :root { --bg: #ffffff; --fg: #1b1f24; --muted: #57606a; --link: #0b57d0; --rule: #d0d7de; }
+          @media (prefers-color-scheme: dark) {
+            :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --link: #6cb6ff; --rule: #30363d; }
+          }
+          body { margin: 0; background: var(--bg); color: var(--fg);
+                 font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+          main { max-width: 42rem; margin: 0 auto; padding: 2rem 1rem; }
+          h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+          p { color: var(--muted); }
+          a { color: var(--link); }
+          h2 { font-size: 1.1rem; border-top: 1px solid var(--rule); padding-top: 1rem; margin-top: 1.5rem; }
+          code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
+          </style>
+          </head>
+          <body>
+          <main>
+          <h1>shadowgate</h1>
+          <p>Confidence-gated model cascades that audit the cases they skip. Built with <code>$version</code>.</p>
+          <h2>Demo</h2>
+          <ul>
+          <li><a href="demo/report.html">Demo report (HTML)</a>: 400 simulated tasks, offline, from <code>shadowgate demo</code></li>
+          <li><a href="demo/report.md">Demo report (Markdown)</a></li>
+          </ul>
+          <h2>Results</h2>
+          <ul>$results</ul>
+          </main>
+          </body>
+          </html>
+          EOF
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
