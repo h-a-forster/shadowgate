@@ -5,7 +5,15 @@ import re
 import pytest
 
 from shadowgate.errors import ConfigError
-from shadowgate.pricing import PRICES, PRICES_AS_OF, Pricing, cost_of, lookup, pricing_from_spec
+from shadowgate.pricing import (
+    PRICES,
+    PRICES_AS_OF,
+    Pricing,
+    cost_of,
+    cost_with_cache_ttl,
+    lookup,
+    pricing_from_spec,
+)
 from shadowgate.types import Usage
 
 
@@ -85,6 +93,11 @@ def test_haiku_5_5_tiered_pricing() -> None:
         "openrouter/anthropic/claude-haiku-4-5",
         "anthropic.claude-haiku-4-5-20251001-v1:0",
         "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "apac.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "claude-haiku-4-5@20251001",
+        "anthropic/claude-haiku-4-5@20251001",
     ],
 )
 def test_lookup_variants(model: str) -> None:
@@ -146,3 +159,37 @@ def test_pricing_from_spec_rejects(spec: dict) -> None:
 def test_unknown_key_named() -> None:
     with pytest.raises(ConfigError, match="bogus"):
         pricing_from_spec({"input": 1, "output": 2, "bogus": 3})
+
+
+def test_lookup_strips_vertex_suffix_on_other_models() -> None:
+    assert lookup("claude-opus-4-8@20260101") is PRICES["claude-opus-4-8"]
+    assert lookup("global.anthropic.claude-sonnet-5-5") is PRICES["claude-sonnet-5-5"]
+
+
+def test_cost_with_cache_ttl_no_1h_equals_cost_of() -> None:
+    usage = Usage(input_tokens=100, output_tokens=10, cache_write_tokens=1000)
+    assert cost_with_cache_ttl("claude-haiku-4-5", usage) == pytest.approx(
+        cost_of("claude-haiku-4-5", usage)
+    )
+    assert cost_with_cache_ttl("unknown-model", usage, write_1h_tokens=10) is None
+
+
+def test_cost_with_cache_ttl_prices_1h_writes_at_2x_input() -> None:
+    usage = Usage(input_tokens=100, output_tokens=10, cache_write_tokens=1000)
+    got = cost_with_cache_ttl("claude-haiku-4-5", usage, write_1h_tokens=600)
+    expected = (100 * 1.0 + 10 * 5.0 + 400 * 1.25 + 600 * 2.0) / 1e6
+    assert got == pytest.approx(expected)
+    # Clamped to the cache-write total.
+    capped = cost_with_cache_ttl("claude-haiku-4-5", usage, write_1h_tokens=99_999)
+    assert capped == pytest.approx((100 * 1.0 + 10 * 5.0 + 1000 * 2.0) / 1e6)
+
+
+def test_cost_with_cache_ttl_override_and_long_context() -> None:
+    override = Pricing(2.0, 4.0, cache_write_per_mtok=3.0)
+    usage = Usage(cache_write_tokens=1000)
+    got = cost_with_cache_ttl("whatever", usage, write_1h_tokens=1000, override=override)
+    assert got == pytest.approx(1000 * 4.0 / 1e6)
+    # Above the threshold the long-context card's input price sets the 1h rate.
+    usage = Usage(input_tokens=60_000, cache_write_tokens=50_000)
+    got = cost_with_cache_ttl("claude-haiku-5-5", usage, write_1h_tokens=50_000)
+    assert got == pytest.approx((60_000 * 0.50 + 50_000 * 1.0) / 1e6)

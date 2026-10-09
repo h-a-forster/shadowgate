@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import threading
@@ -259,3 +260,158 @@ def test_parse_retry_after() -> None:
     assert parse_retry_after(None) is None
     past = parse_retry_after({"retry-after": "Wed, 21 Oct 2015 07:28:00 GMT"})
     assert past == 0.0
+
+
+# ---------------------------------------------------------------------- hardening regressions
+
+
+class _Server:
+    """Loopback server running ``handle(handler)`` for every request (GET and POST)."""
+
+    def __init__(self, handle: Any) -> None:
+        self.seen: list[tuple[str, str, str | None]] = []
+        seen = self.seen
+
+        class Handler(BaseHTTPRequestHandler):
+            def _any(self) -> None:
+                seen.append((self.command, self.path, self.headers.get("Authorization")))
+                n = int(self.headers.get("Content-Length", "0") or 0)
+                if n:
+                    self.rfile.read(n)
+                handle(self)
+
+            do_GET = do_POST = _any  # noqa: N815
+
+            def log_message(self, *args: Any) -> None:
+                pass
+
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+
+    @property
+    def port(self) -> int:
+        return self.httpd.server_address[1]
+
+    def __enter__(self) -> _Server:
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+
+
+def _send_json(h: BaseHTTPRequestHandler, body: Any, status: int = 200) -> None:
+    payload = json.dumps(body).encode()
+    h.send_response(status)
+    h.send_header("Content-Type", "application/json")
+    h.send_header("Content-Length", str(len(payload)))
+    h.end_headers()
+    h.wfile.write(payload)
+
+
+@pytest.fixture()
+def no_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NO_PROXY", "*")
+    monkeypatch.setenv("no_proxy", "*")
+
+
+@pytest.mark.parametrize("code", [301, 302, 303, 307, 308])
+def test_redirect_refused_and_key_not_leaked(
+    code: int, no_proxy: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SHADOWGATE_TEST_OPENAI_KEY", "sk-secret-redirect")
+    with _Server(lambda h: _send_json(h, _ok_body())) as other:
+        target = f"http://localhost:{other.port}/collect"
+
+        def redirect(h: BaseHTTPRequestHandler) -> None:
+            h.send_response(code)
+            h.send_header("Location", target)
+            h.send_header("Content-Length", "0")
+            h.end_headers()
+
+        with _Server(redirect) as api:
+            b, sleeps = _backend(f"http://127.0.0.1:{api.port}/v1")
+            with pytest.raises(BackendError) as ei:
+                b.complete(Request(prompt="hi"))
+        assert other.seen == []  # the redirect target never got a request (or the key)
+    err = ei.value
+    assert err.retryable is False
+    assert f"localhost:{other.port}" in str(err)
+    assert "redirect" in str(err)
+    assert "sk-secret-redirect" not in str(err)
+    assert len(api.seen) == 1 and sleeps == []
+
+
+def test_overall_timeout_on_trickling_body(no_proxy: None) -> None:
+    import time
+
+    def trickle(h: BaseHTTPRequestHandler) -> None:
+        h.send_response(200)
+        h.send_header("Content-Length", "1000")
+        h.end_headers()
+        try:
+            for _ in range(10):
+                h.wfile.write(b" ")
+                h.wfile.flush()
+                time.sleep(0.3)
+        except OSError:
+            pass
+
+    with _Server(trickle) as api:
+        b, _ = _backend(f"http://127.0.0.1:{api.port}/v1", timeout_s=1,
+                        retry=RetryPolicy(max_attempts=1))
+        t0 = time.monotonic()
+        with pytest.raises(BackendError) as ei:
+            b.complete(Request(prompt="hi"))
+        elapsed = time.monotonic() - t0
+    assert ei.value.retryable is True
+    assert "timeout" in str(ei.value)
+    assert elapsed < 2.0
+
+
+@pytest.mark.parametrize("with_length", [True, False])
+def test_response_size_cap(
+    with_length: bool, no_proxy: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shadowgate.backends.openai_compat as oc
+
+    monkeypatch.setattr(oc, "MAX_RESPONSE_BYTES", 1000)
+    big = json.dumps(_ok_body(padding="x" * 5000)).encode()
+
+    def respond(h: BaseHTTPRequestHandler) -> None:
+        h.send_response(200)
+        if with_length:
+            h.send_header("Content-Length", str(len(big)))
+        h.end_headers()
+        with contextlib.suppress(OSError):
+            h.wfile.write(big)
+
+    with _Server(respond) as api:
+        b, sleeps = _backend(f"http://127.0.0.1:{api.port}/v1")
+        with pytest.raises(BackendError) as ei:
+            b.complete(Request(prompt="hi"))
+    assert ei.value.retryable is False
+    assert "larger than" in str(ei.value)
+    assert sleeps == []
+
+
+def test_latency_is_final_attempt_only(no_proxy: None) -> None:
+    import time
+
+    calls = {"n": 0}
+
+    def respond(h: BaseHTTPRequestHandler) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            time.sleep(0.5)
+            _send_json(h, {"error": {"message": "busy"}}, status=503)
+        else:
+            _send_json(h, _ok_body())
+
+    with _Server(respond) as api:
+        b, sleeps = _backend(f"http://127.0.0.1:{api.port}/v1")
+        c = b.complete(Request(prompt="hi"))
+    assert calls["n"] == 2 and len(sleeps) == 1
+    assert 0 < c.latency_s < 0.4

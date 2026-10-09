@@ -5,13 +5,13 @@ from __future__ import annotations
 import math
 import os
 import shlex
-import subprocess
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import PurePath
 from typing import TYPE_CHECKING
 
 from ..errors import BackendError, ConfigError
 from ..types import Completion, Request, Usage
+from ._proc import ProcessTimeout, run_process
 from .base import RetryPolicy, Timer, TransientError, call_with_retries
 
 if TYPE_CHECKING:
@@ -39,8 +39,11 @@ class CommandBackend:
     rules on POSIX and passed to ``CreateProcess`` unchanged on Windows; no shell is involved.
 
     A timeout, or a non-zero exit code listed in ``retryable_exit_codes``, is retried; any other
-    non-zero exit raises a non-retryable ``BackendError``. Usage is estimated from character
-    counts. ``cost_usd`` comes from ``pricing`` when given, else None.
+    non-zero exit raises a non-retryable ``BackendError``. The timeout is enforced on the whole
+    process tree: on expiry the command and any processes it started are killed. Usage is
+    estimated from character counts. ``cost_usd`` comes from ``pricing`` when given, else None.
+    ``latency_s`` is the wall time of the final, successful attempt (failed attempts and backoff
+    sleeps excluded).
     """
 
     def __init__(
@@ -86,16 +89,14 @@ class CommandBackend:
         env = None if self.env is None else {**os.environ, **self.env}
         with Timer() as timer:
             try:
-                proc = subprocess.run(
+                proc = run_process(
                     self.command,
                     input=stdin_text.encode("utf-8"),
-                    capture_output=True,
+                    timeout=self.timeout_s,
                     cwd=self.cwd,
                     env=env,
-                    timeout=self.timeout_s,
-                    check=False,
                 )
-            except subprocess.TimeoutExpired as exc:
+            except ProcessTimeout as exc:
                 raise TransientError(f"command timed out after {self.timeout_s:g}s") from exc
             except OSError as exc:
                 raise BackendError(

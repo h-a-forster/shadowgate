@@ -105,6 +105,11 @@ class AnthropicBackend:
     (``output_config`` dicts are merged key by key). Only ``text`` blocks contribute to the
     completion text; ``thinking`` and other blocks are ignored. Claude does not expose logprobs,
     so ``Completion.logprobs`` is always None.
+
+    A response that is not message-shaped (``type == "message"`` with a list ``content``), such
+    as the plain string the SDK returns for a non-JSON 200 from a misconfigured ``base_url``,
+    raises a non-retryable BackendError. ``latency_s`` is the wall time of the final, successful
+    attempt (failed attempts and backoff sleeps excluded).
     """
 
     def __init__(
@@ -165,8 +170,23 @@ class AnthropicBackend:
             raise classify_error(exc, backend=self.name) from None
 
     def parse(self, response: Any, latency_s: float) -> Completion:
+        content = None if isinstance(response, (str, bytes)) else _get(response, "content", None)
+        if (
+            isinstance(response, (str, bytes))
+            or _get(response, "type", None) != "message"
+            or not isinstance(content, (list, tuple))
+        ):
+            if isinstance(response, (str, bytes)):
+                detail = f"{type(response).__name__} {_truncate(repr(response[:200]))}"
+            else:
+                detail = type(response).__name__
+            raise BackendError(
+                f"unexpected response type from the Messages API ({detail}); check base_url",
+                backend=self.name,
+                retryable=False,
+            )
         parts: list[str] = []
-        for block in _get(response, "content", None) or ():
+        for block in content:
             if _get(block, "type") == "text":
                 parts.append(str(_get(block, "text", "") or ""))
         raw_stop = _get(response, "stop_reason")
@@ -194,11 +214,16 @@ class AnthropicBackend:
 
     def complete(self, request: Request) -> Completion:
         kwargs = self.build_kwargs(request)
-        with Timer() as timer:
-            response = call_with_retries(
-                lambda: self._call(kwargs), policy=self.retry, backend=self.name, sleep=self._sleep
-            )
-        return self.parse(response, timer.elapsed)
+
+        def attempt() -> tuple[Any, float]:
+            with Timer() as timer:
+                response = self._call(kwargs)
+            return response, timer.elapsed
+
+        response, latency = call_with_retries(
+            attempt, policy=self.retry, backend=self.name, sleep=self._sleep
+        )
+        return self.parse(response, latency)
 
     def __repr__(self) -> str:
         return f"AnthropicBackend(name={self.name!r})"

@@ -20,8 +20,9 @@ class FunctionBackend:
     """Turn ``fn(request) -> str | Completion`` into a Backend.
 
     A returned string becomes a Completion with usage estimated as ``ceil(chars / 4)``,
-    measured latency, and cost from ``pricing`` (None when no pricing is given). A returned
-    Completion is passed through unchanged. ``fn`` may raise ``TransientError`` to be retried
+    latency of the final, successful call (failed attempts and backoff sleeps excluded), and
+    cost from ``pricing`` (None when no pricing is given). A returned Completion is passed
+    through unchanged. ``fn`` may raise ``TransientError`` to be retried
     per ``retry``; other exceptions become BackendError. ``fn`` must be thread-safe.
     """
 
@@ -41,10 +42,12 @@ class FunctionBackend:
         self.retry = retry or RetryPolicy(max_attempts=1)
 
     def complete(self, request: Request) -> Completion:
-        with Timer() as timer:
-            out = call_with_retries(
-                lambda: self.fn(request), policy=self.retry, backend=self.name
-            )
+        def attempt() -> tuple[str | Completion, float]:
+            with Timer() as timer:
+                result = self.fn(request)
+            return result, timer.elapsed
+
+        out, latency = call_with_retries(attempt, policy=self.retry, backend=self.name)
         if isinstance(out, Completion):
             return out
         if not isinstance(out, str):
@@ -61,5 +64,5 @@ class FunctionBackend:
             model=self.name,
             usage=usage,
             cost_usd=None if self.pricing is None else self.pricing.cost(usage),
-            latency_s=timer.elapsed,
+            latency_s=latency,
         )

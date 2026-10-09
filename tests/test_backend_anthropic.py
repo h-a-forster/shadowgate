@@ -26,6 +26,7 @@ def _response(
         "cache_creation_input_tokens": None,
     }
     return SimpleNamespace(
+        type="message",
         content=content if content is not None else [SimpleNamespace(type="text", text="hi")],
         stop_reason=stop_reason,
         model=model,
@@ -335,3 +336,53 @@ def test_real_sdk_exception_mapping() -> None:
         pytest.skip(f"cannot construct connection errors: {exc}")
     assert isinstance(classify_error(conn, backend="b"), TransientError)
     assert isinstance(classify_error(tmo, backend="b"), TransientError)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "<html>bad gateway</html>",
+        b"\x00",
+        {"type": "error", "error": {"message": "x"}},
+        SimpleNamespace(type="message", content="not a list"),
+        SimpleNamespace(content=[SimpleNamespace(type="text", text="hi")]),  # no type
+    ],
+)
+def test_non_message_response_rejected(response: Any) -> None:
+    b, client, sleeps = _backend([response])
+    with pytest.raises(BackendError) as ei:
+        b.complete(Request(prompt="x"))
+    assert ei.value.retryable is False
+    assert "unexpected response type" in str(ei.value)
+    assert len(client.messages.calls) == 1 and sleeps == []
+
+
+def test_dict_message_response_accepted() -> None:
+    resp = {"type": "message", "model": "claude-haiku-5-5", "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}}
+    b, _, _ = _backend([resp])
+    assert b.complete(Request(prompt="x")).text == "ok"
+
+
+def test_latency_is_final_attempt_only() -> None:
+    import time
+
+    class SlowFail:
+        def __init__(self) -> None:
+            self.n = 0
+
+        def create(self, **kwargs: Any) -> Any:
+            self.n += 1
+            if self.n == 1:
+                time.sleep(0.5)
+                raise APIConnectionError("reset")
+            return _response()
+
+    client = SimpleNamespace(messages=SlowFail())
+    sleeps: list[float] = []
+    b = AnthropicBackend("claude-haiku-5-5", client=client, sleep=sleeps.append,
+                         retry=RetryPolicy(max_attempts=3))
+    c = b.complete(Request(prompt="x"))
+    assert client.messages.n == 2 and len(sleeps) == 1
+    assert 0 <= c.latency_s < 0.4

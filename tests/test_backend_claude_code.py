@@ -10,9 +10,14 @@ from typing import Any
 import pytest
 
 from shadowgate.backends.base import RetryPolicy
-from shadowgate.backends.claude_code import DEFAULT_SYSTEM, ClaudeCodeBackend
+from shadowgate.backends.claude_code import (
+    DEFAULT_ISOLATION_ARGS,
+    DEFAULT_SYSTEM,
+    ClaudeCodeBackend,
+)
 from shadowgate.errors import BackendError, ConfigError
-from shadowgate.types import Request
+from shadowgate.pricing import PRICES, Pricing, cost_of
+from shadowgate.types import Request, Usage
 
 FIXTURE = Path(__file__).parent / "fixtures" / "claude_code_result.json"
 
@@ -30,11 +35,21 @@ FAKE_CLI = textwrap.dedent(
         with open(log_path, encoding="utf-8") as f:
             calls = json.load(f)
     stdin = sys.stdin.buffer.read().decode("utf-8")
+    sysfile = None
+    if "--system-prompt-file" in sys.argv:
+        with open(sys.argv[sys.argv.index("--system-prompt-file") + 1], encoding="utf-8",
+                  newline="") as f:
+            sysfile = f.read()
     calls.append({"argv": sys.argv[2:], "cwd": os.getcwd(), "stdin": stdin,
-                  "cwd_entries": os.listdir(".")})
+                  "cwd_entries": os.listdir("."), "sysfile": sysfile})
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump(calls, f)
     resp = cfg["responses"][min(len(calls), len(cfg["responses"])) - 1]
+    if resp.get("grandchild"):
+        # A grandchild that inherits stdout/stderr and outlives us (pipe stays open).
+        import subprocess
+        subprocess.Popen([sys.executable, "-c",
+                          "import time; time.sleep(" + str(resp["grandchild"]) + ")"])
     if resp.get("sleep"):
         time.sleep(resp["sleep"])
     sys.stdout.buffer.write(resp.get("stdout", "").encode("utf-8"))
@@ -277,3 +292,194 @@ def test_invalid_effort_rejected(cli: FakeCli) -> None:
     with pytest.raises(BackendError):
         cli.backend().complete(Request(prompt="x", effort="low & calc"))
     assert cli.calls == []
+
+
+# ---------------------------------------------------------------------- hardening regressions
+
+
+@pytest.mark.parametrize("model", ["haiku\n", "haiku\n& calc", "\nhaiku"])
+def test_model_with_newline_rejected(model: str) -> None:
+    with pytest.raises(ConfigError):
+        ClaudeCodeBackend(model, executable=["x"])
+
+
+def test_effort_with_trailing_newline_rejected(cli: FakeCli) -> None:
+    cli.respond({"stdout": _result()})
+    with pytest.raises(BackendError):
+        cli.backend().complete(Request(prompt="x", effort="low\n"))
+    assert cli.calls == []
+
+
+def _shim(cli: FakeCli, tmp_path: Path) -> str:
+    shim = tmp_path / "claude.cmd"
+    shim.write_text(
+        f'@echo off\r\n"{sys.executable}" "{cli.script}" "{cli.cfg}" %*\r\n', encoding="utf-8"
+    )
+    return str(shim)
+
+
+def _assert_isolated(argv: list[str]) -> None:
+    assert argv[:5] == ["-p", "--output-format", "json", "--model", "haiku"]
+    assert argv[-len(DEFAULT_ISOLATION_ARGS):] == list(DEFAULT_ISOLATION_ARGS)
+    assert "--system-prompt" not in argv
+
+
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe shims are Windows-only")
+@pytest.mark.parametrize(
+    "system",
+    [
+        "Answer briefly.\n",
+        "Line one\nLine two\r\n& echo pwned | more > nul",
+        'Quote " and 100% ^caret (paren) <tag>',
+    ],
+)
+def test_shim_never_gets_free_text(cli: FakeCli, tmp_path: Path, system: str) -> None:
+    cli.respond({"stdout": _result()})
+    b = ClaudeCodeBackend("haiku", executable=_shim(cli, tmp_path), retry=FAST_RETRY)
+    assert b._resolve()[1] is True
+    b.complete(Request(prompt="hi", system=system, effort="low"))
+    (call,) = cli.calls
+    argv = call["argv"]
+    _assert_isolated(argv)
+    assert argv[argv.index("--effort") + 1] == "low"
+    assert call["sysfile"] == system
+    assert call["stdin"] == "hi"
+    # The system-prompt file is outside the (empty) working directory and is removed.
+    sysfile = Path(argv[argv.index("--system-prompt-file") + 1])
+    assert call["cwd_entries"] == []
+    assert not sysfile.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe shims are Windows-only")
+def test_shim_default_system_via_file(cli: FakeCli, tmp_path: Path) -> None:
+    cli.respond({"stdout": _result()})
+    b = ClaudeCodeBackend("haiku", executable=_shim(cli, tmp_path), retry=FAST_RETRY)
+    b.complete(Request(prompt="hi"))
+    (call,) = cli.calls
+    _assert_isolated(call["argv"])
+    assert call["sysfile"] == DEFAULT_SYSTEM
+
+
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe shims are Windows-only")
+def test_shim_unsafe_scratch_path_falls_back_in_band(cli: FakeCli, tmp_path: Path) -> None:
+    b = ClaudeCodeBackend("haiku", executable=_shim(cli, tmp_path))
+    argv, stdin = b.build_command(
+        Request(prompt="q", system="S\n& x"), scratch_dir=str(tmp_path / "a&b")
+    )
+    assert stdin == "S\n& x\n\nq"
+    assert "--system-prompt-file" not in argv and "--system-prompt" not in argv
+    assert argv[-len(DEFAULT_ISOLATION_ARGS):] == list(DEFAULT_ISOLATION_ARGS)
+    argv2, stdin2 = b.build_command(Request(prompt="q", system="S"))  # no scratch dir
+    assert stdin2 == "S\n\nq" and "--system-prompt-file" not in argv2
+
+
+def test_non_shim_system_with_newline_stays_on_argv(cli: FakeCli) -> None:
+    cli.respond({"stdout": _result()})
+    cli.backend().complete(Request(prompt="hi", system="Answer briefly.\n"))
+    argv = cli.calls[0]["argv"]
+    assert argv[argv.index("--system-prompt") + 1] == "Answer briefly.\n"
+    assert argv[-len(DEFAULT_ISOLATION_ARGS):] == list(DEFAULT_ISOLATION_ARGS)
+
+
+def test_timeout_kills_grandchild_holding_pipes(cli: FakeCli) -> None:
+    import time
+
+    cli.respond({"stdout": _result(), "grandchild": 30, "sleep": 30})
+    t0 = time.monotonic()
+    with pytest.raises(BackendError) as ei:
+        cli.backend(timeout_s=1.0, retry=RetryPolicy(max_attempts=1)).complete(
+            Request(prompt="x")
+        )
+    elapsed = time.monotonic() - t0
+    assert ei.value.retryable is True and "timed out" in str(ei.value)
+    assert elapsed < 1.0 + 4.0, elapsed
+
+
+# -- cost resolution
+
+
+def _usage_result(model: str, *, basis: str | None, cli_cost: float, **usage: Any) -> str:
+    u = {"input_tokens": 1000, "output_tokens": 100, "cache_read_input_tokens": 0,
+         "cache_creation_input_tokens": 0}
+    u.update(usage)
+    entry: dict[str, Any] = {"inputTokens": u["input_tokens"], "costUSD": cli_cost}
+    if basis is not None:
+        entry["costBasis"] = basis
+    return _result(usage=u, total_cost_usd=cli_cost, modelUsage={model: entry})
+
+
+def test_fixture_cost_matches_table(cli: FakeCli) -> None:
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    cli.respond({"stdout": _result()})
+    comp = cli.backend().complete(Request(prompt="x"))
+    assert comp.cost_usd == pytest.approx(cost_of("claude-haiku-4-5", comp.usage))
+    assert comp.cost_usd == pytest.approx(fixture["total_cost_usd"])  # the CLI agreed here
+
+
+def test_unrecognized_model_uses_table_not_cli(cli: FakeCli) -> None:
+    # The CLI misprices models it does not know (~50x too high) and says so on stderr.
+    cli.respond({"stdout": _usage_result("claude-haiku-5-5", basis="unknown", cli_cost=0.05),
+                 "stderr": "[claude-code:unrecognized_model] claude-haiku-5-5\n"})
+    comp = cli.backend().complete(Request(prompt="x"))
+    assert comp.model == "claude-haiku-5-5"
+    assert comp.cost_usd == pytest.approx((1000 * 0.10 + 100 * 0.50) / 1e6)
+
+
+@pytest.mark.parametrize(
+    ("basis", "stderr", "expected"),
+    [
+        ("list", "", 0.0123),
+        (None, "", 0.0123),  # older CLIs report no basis
+        ("unknown", "", None),
+        ("list", "[claude-code:unrecognized_model]", None),
+    ],
+)
+def test_cli_cost_only_with_known_basis(
+    cli: FakeCli, basis: str | None, stderr: str, expected: float | None
+) -> None:
+    cli.respond({"stdout": _usage_result("claude-future-9", basis=basis, cli_cost=0.0123),
+                 "stderr": stderr})
+    comp = cli.backend().complete(Request(prompt="x"))
+    assert comp.model == "claude-future-9"
+    if expected is None:
+        assert comp.cost_usd is None
+    else:
+        assert comp.cost_usd == pytest.approx(expected)
+
+
+def test_pricing_override_wins(cli: FakeCli) -> None:
+    cli.respond({"stdout": _usage_result("claude-haiku-5-5", basis="list", cli_cost=9.0)})
+    comp = cli.backend(pricing=Pricing(1.0, 2.0)).complete(Request(prompt="x"))
+    assert comp.cost_usd == pytest.approx((1000 * 1.0 + 100 * 2.0) / 1e6)
+
+
+def test_configured_model_used_when_cli_reports_none(cli: FakeCli) -> None:
+    data = json.loads(_usage_result("x", basis="list", cli_cost=9.0))
+    data.pop("modelUsage")
+    cli.respond({"stdout": json.dumps(data)})
+    comp = ClaudeCodeBackend(
+        "claude-haiku-5-5", executable=cli.executable, retry=FAST_RETRY
+    ).complete(Request(prompt="x"))
+    assert comp.cost_usd == pytest.approx((1000 * 0.10 + 100 * 0.50) / 1e6)
+
+
+def test_one_hour_cache_writes_priced_at_2x(cli: FakeCli) -> None:
+    out = json.loads(_usage_result("claude-haiku-4-5-20251001", basis="list", cli_cost=1.0,
+                                   cache_creation_input_tokens=3000))
+    out["usage"]["cache_creation"] = {"ephemeral_1h_input_tokens": 2000,
+                                      "ephemeral_5m_input_tokens": 1000}
+    cli.respond({"stdout": json.dumps(out)})
+    comp = cli.backend().complete(Request(prompt="x"))
+    assert PRICES["claude-haiku-4-5"].input_per_mtok == 1.0
+    expected = (1000 * 1.0 + 100 * 5.0 + 1000 * 1.25 + 2000 * 2.0) / 1e6
+    assert comp.usage.cache_write_tokens == 3000
+    assert comp.cost_usd == pytest.approx(expected)
+
+
+def test_resolve_cost_reports_basis(cli: FakeCli) -> None:
+    b = cli.backend()
+    u = Usage(input_tokens=10)
+    assert b.resolve_cost({}, u, "claude-haiku-4-5")[1] == "table"
+    assert b.resolve_cost({"total_cost_usd": 1.0}, u, "nope")[1].startswith("cli:")
+    assert b.resolve_cost({}, u, "nope") == (None, "unknown")
+    assert cli.backend(pricing=Pricing(1.0, 1.0)).resolve_cost({}, u, "nope")[1] == "override"

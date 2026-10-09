@@ -6,8 +6,9 @@ prices change; the table goes stale. Any backend accepts a ``pricing`` override 
 tokens), which always wins over the table. Models missing from the table get ``cost_usd=None``
 (unknown), never zero.
 
-Anthropic cache-write prices in the table use the 5-minute TTL rate (1.25x base input). Requests
-that write with the 1-hour TTL (2x base input) are under-costed unless an override is supplied.
+Anthropic cache-write prices in the table use the 5-minute TTL rate (1.25x base input). Writes
+with the 1-hour TTL cost 2x base input; ``cost_with_cache_ttl`` prices them when the caller knows
+how many of the cache-write tokens used the 1-hour TTL (``cost_of`` alone under-costs them).
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ __all__ = [
     "PRICES_AS_OF",
     "Pricing",
     "cost_of",
+    "cost_with_cache_ttl",
     "lookup",
     "pricing_from_spec",
 ]
@@ -51,10 +53,17 @@ class Pricing:
     long_context: Pricing | None = None
     long_context_threshold: int = 100_000
 
-    def cost(self, usage: Usage) -> float:
+    def card_for(self, usage: Usage) -> Pricing:
+        """The rate card that applies to ``usage`` (the long-context card above the threshold)."""
         prompt = usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens
         if self.long_context is not None and prompt > self.long_context_threshold:
-            return self.long_context.cost(usage)
+            return self.long_context
+        return self
+
+    def cost(self, usage: Usage) -> float:
+        card = self.card_for(usage)
+        if card is not self:
+            return card.cost(usage)
         read = self.input_per_mtok if self.cache_read_per_mtok is None else self.cache_read_per_mtok
         write = (
             self.input_per_mtok if self.cache_write_per_mtok is None else self.cache_write_per_mtok
@@ -106,19 +115,24 @@ PRICES: dict[str, Pricing] = {
 
 # Provider prefixes stripped by lookup(): "anthropic/claude-x", "anthropic:claude-x",
 # "anthropic.claude-x" (Amazon Bedrock style), "openrouter/anthropic/claude-x", ...
-_PREFIX_RE = re.compile(r"^(?:[A-Za-z0-9_-]+[/:])+|^(?:[a-z]{2}\.)?anthropic\.")
+# Bedrock cross-region inference profiles add "us.", "eu.", "apac.", "global." ... before it.
+_PREFIX_RE = re.compile(r"^(?:[A-Za-z0-9_-]+[/:])+|^(?:[a-z]{2,6}\.)?anthropic\.")
 _DATE_SUFFIX_RE = re.compile(r"-\d{8}$")
 _VERSION_SUFFIX_RE = re.compile(r"-v\d+(?::\d+)?$")
+# Vertex AI pins versions with "@": "claude-haiku-4-5@20251001".
+_VERTEX_SUFFIX_RE = re.compile(r"@[A-Za-z0-9._-]+$")
 
 
 def lookup(model: str) -> Pricing | None:
-    """Find built-in pricing: exact id, then provider-prefix-stripped id, then without a date
-    suffix (``claude-haiku-4-5-20251001`` -> ``claude-haiku-4-5``)."""
+    """Find built-in pricing: exact id, then provider-prefix-stripped id (``anthropic/``,
+    ``us.anthropic.``, ``global.anthropic.``, ...; Bedrock ``-v1:0`` and Vertex ``@date``
+    suffixes dropped), then without a date suffix (``claude-haiku-4-5-20251001`` ->
+    ``claude-haiku-4-5``)."""
     if not model:
         return None
     if model in PRICES:
         return PRICES[model]
-    stripped = _VERSION_SUFFIX_RE.sub("", model)
+    stripped = _VERSION_SUFFIX_RE.sub("", _VERTEX_SUFFIX_RE.sub("", model))
     for _ in range(4):
         new = _PREFIX_RE.sub("", stripped)
         if new == stripped:
@@ -136,6 +150,34 @@ def cost_of(model: str, usage: Usage, override: Pricing | None = None) -> float 
     if pricing is None:
         return None
     return pricing.cost(usage)
+
+
+def cost_with_cache_ttl(
+    model: str,
+    usage: Usage,
+    *,
+    write_1h_tokens: int = 0,
+    override: Pricing | None = None,
+) -> float | None:
+    """Like ``cost_of`` but prices ``write_1h_tokens`` of ``usage.cache_write_tokens`` at the
+    1-hour TTL rate (2x the applicable base input price) instead of the card's cache-write rate.
+
+    ``write_1h_tokens`` is clamped to ``[0, usage.cache_write_tokens]``. None when pricing is
+    unknown.
+    """
+    pricing = override if override is not None else lookup(model)
+    if pricing is None:
+        return None
+    total = pricing.cost(usage)
+    n_1h = max(0, min(int(write_1h_tokens), usage.cache_write_tokens))
+    if n_1h:
+        card = pricing.card_for(usage)
+        write = (
+            card.input_per_mtok if card.cache_write_per_mtok is None
+            else card.cache_write_per_mtok
+        )
+        total += n_1h * (2.0 * card.input_per_mtok - write) / _MTOK
+    return total
 
 
 _SPEC_KEYS = {"input", "output", "cache_read", "cache_write", "long_context",

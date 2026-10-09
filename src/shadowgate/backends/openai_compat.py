@@ -7,6 +7,7 @@ logged or included in error messages.
 
 from __future__ import annotations
 
+import contextlib
 import email.utils
 import http.client
 import json
@@ -23,7 +24,7 @@ from ..pricing import Pricing, cost_of
 from ..types import Completion, Request, Usage
 from .base import RETRYABLE_STATUS, RetryPolicy, Timer, TransientError, call_with_retries
 
-__all__ = ["OpenAICompatBackend", "parse_retry_after"]
+__all__ = ["MAX_RESPONSE_BYTES", "OpenAICompatBackend", "parse_retry_after"]
 
 _FINISH = {
     "stop": "end",
@@ -32,6 +33,44 @@ _FINISH = {
 }
 
 _MAX_ERROR_CHARS = 500
+_MAX_ERROR_BODY_BYTES = 64 * 1024
+_CHUNK = 64 * 1024
+
+#: Responses larger than this are rejected (non-retryable BackendError).
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+
+
+class _RedirectRefused(Exception):
+    def __init__(self, code: int, target_host: str) -> None:
+        super().__init__(f"redirect ({code}) to {target_host}")
+        self.code = code
+        self.target_host = target_host
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect: following one would re-send the Authorization header (urllib
+    keeps it for any host) and turn the POST into a GET whose answer is not ours."""
+
+    def redirect_request(  # type: ignore[override]
+        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> None:
+        try:
+            host = urllib.parse.urlsplit(urllib.parse.urljoin(req.full_url, newurl)).netloc
+        except ValueError:
+            host = ""
+        host = host.rpartition("@")[2]  # never echo userinfo
+        raise _RedirectRefused(code, host or "?")
+
+
+def _opener() -> urllib.request.OpenerDirector:
+    # Built per request so proxy environment variables are read at call time, as urlopen does.
+    return urllib.request.build_opener(_NoRedirect)
+
+
+def _set_read_timeout(resp: Any, seconds: float) -> None:
+    """Best effort: shrink the socket timeout of an http.client response to ``seconds``."""
+    with contextlib.suppress(AttributeError, OSError, ValueError):
+        resp.fp.raw._sock.settimeout(max(0.001, seconds))
 
 
 def parse_retry_after(headers: Any) -> float | None:
@@ -128,6 +167,12 @@ class OpenAICompatBackend:
 
     ``Request.effort`` is ignored (not part of the common chat/completions surface); pass
     provider-specific fields such as ``reasoning_effort`` through ``Request.extra``.
+
+    Redirects are never followed (non-retryable BackendError naming the target host), so the
+    API key is only ever sent to ``base_url``. ``timeout_s`` bounds each attempt overall
+    (connect, headers and body); bodies over ``MAX_RESPONSE_BYTES`` are rejected. ``latency_s``
+    is the wall time of the final, successful attempt (failed attempts and backoff sleeps
+    excluded).
     """
 
     def __init__(
@@ -194,13 +239,22 @@ class OpenAICompatBackend:
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(self.url, data=data, headers=self._headers(), method="POST")
+        deadline = time.monotonic() + self.timeout_s
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-                raw = resp.read()
+            with _opener().open(req, timeout=self.timeout_s) as resp:
+                raw = self._read_body(resp, deadline)
+        except _RedirectRefused as exc:
+            raise BackendError(
+                f"refusing to follow HTTP {exc.code} redirect to {exc.target_host!r}; set "
+                "base_url to the final endpoint",
+                backend=self.name,
+                status=exc.code,
+                retryable=False,
+            ) from None
         except urllib.error.HTTPError as exc:
             status = exc.code
             try:
-                err_body = exc.read()
+                err_body = exc.read(_MAX_ERROR_BODY_BYTES)
             except OSError:
                 err_body = b""
             msg = f"HTTP {status}: {_error_message(err_body) or exc.reason}"
@@ -230,6 +284,39 @@ class OpenAICompatBackend:
                 f"provider error: {_error_message(raw)}", backend=self.name, retryable=False
             )
         return parsed
+
+    def _read_body(self, resp: Any, deadline: float) -> bytes:
+        """Read the response body within the overall deadline and the size cap."""
+        headers = getattr(resp, "headers", None)
+        length = headers.get("Content-Length") if headers is not None else None
+        try:
+            too_large = length is not None and int(length) > MAX_RESPONSE_BYTES
+        except ValueError:
+            too_large = False
+        if too_large:
+            raise self._too_large()
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("response body not received in time")
+            _set_read_timeout(resp, remaining)
+            chunk = resp.read1(_CHUNK) if hasattr(resp, "read1") else resp.read(_CHUNK)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_RESPONSE_BYTES:
+                raise self._too_large()
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    def _too_large(self) -> BackendError:
+        return BackendError(
+            f"response larger than {MAX_RESPONSE_BYTES // (1024 * 1024)} MiB",
+            backend=self.name,
+            retryable=False,
+        )
 
     # ------------------------------------------------------------------ parsing
 
@@ -292,11 +379,16 @@ class OpenAICompatBackend:
 
     def complete(self, request: Request) -> Completion:
         body = self.build_body(request)
-        with Timer() as timer:
-            data = call_with_retries(
-                lambda: self._post(body), policy=self.retry, backend=self.name, sleep=self._sleep
-            )
-        return self.parse(data, timer.elapsed)
+
+        def attempt() -> tuple[dict[str, Any], float]:
+            with Timer() as timer:
+                data = self._post(body)
+            return data, timer.elapsed
+
+        data, latency = call_with_retries(
+            attempt, policy=self.retry, backend=self.name, sleep=self._sleep
+        )
+        return self.parse(data, latency)
 
     def __repr__(self) -> str:
         return f"OpenAICompatBackend(name={self.name!r}, url={self.url!r})"

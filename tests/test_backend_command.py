@@ -170,3 +170,45 @@ def test_env_and_cwd(tmp_path: Path) -> None:
     var, cwd = text.split("|", 1)
     assert var == "v1"
     assert Path(cwd).resolve() == tmp_path.resolve()
+
+
+GRANDCHILD = """
+import subprocess, sys, time
+# The grandchild inherits stdout/stderr; it keeps the pipes open after we are killed.
+subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+time.sleep(float(sys.argv[1]) if len(sys.argv) > 1 else 30)
+print("late")
+"""
+
+
+@pytest.mark.parametrize("child_sleep", ["30", "0"])
+def test_timeout_with_grandchild_is_enforced(tmp_path: Path, child_sleep: str) -> None:
+    import time
+
+    # child_sleep=30: child and grandchild both hang. 0: child exits at once, but the
+    # grandchild holds stdout open, so the output is not complete before the deadline.
+    cmd = [*_script(tmp_path, GRANDCHILD, name="gc.py"), child_sleep]
+    b = CommandBackend(cmd, name="gc", timeout_s=1.0, retry=RetryPolicy(max_attempts=1))
+    t0 = time.monotonic()
+    with pytest.raises(BackendError) as ei:
+        b.complete(Request(prompt="x"))
+    elapsed = time.monotonic() - t0
+    assert ei.value.retryable is True and "timed out" in str(ei.value)
+    assert elapsed < 1.0 + 4.0, elapsed
+
+
+def test_latency_is_final_attempt_only(tmp_path: Path) -> None:
+    body = """
+    import pathlib, sys, time
+    marker = pathlib.Path(sys.argv[1])
+    if not marker.exists():
+        marker.write_text("x")
+        time.sleep(0.6)
+        sys.exit(75)
+    print("ok")
+    """
+    cmd = [*_script(tmp_path, body, name="flaky.py"), str(tmp_path / "marker")]
+    b = CommandBackend(cmd, name="flaky", retry=FAST_RETRY, retryable_exit_codes=[75])
+    comp = b.complete(Request(prompt="x"))
+    assert comp.text == "ok"
+    assert comp.latency_s < 0.6
