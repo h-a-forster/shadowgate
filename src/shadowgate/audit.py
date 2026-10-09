@@ -491,19 +491,19 @@ def summarize(
         if d.mode == "eval":
             last = next((a for a in reversed(d.attempts) if a.tier == final), None)
             if last is not None and last.error is None:
-                c = _attempt_cost(last)
-                if c is None:
+                ref_cost = _attempt_cost(last)
+                if ref_cost is None:
                     n_ref_cost_unknown += 1
                 else:
-                    ref_costs.append(c)
+                    ref_costs.append(ref_cost)
                     ref_weights.append(1.0)
         elif not is_skipped and reference_tier == final and served is not None:
             if served.tier == reference_tier and served.error is None:
-                c = _attempt_cost(served)
-                if c is None:
+                ref_cost = _attempt_cost(served)
+                if ref_cost is None:
                     n_ref_cost_unknown += 1
                 else:
-                    ref_costs.append(c)
+                    ref_costs.append(ref_cost)
                     ref_weights.append(1.0)
         if not is_skipped:
             continue
@@ -544,11 +544,11 @@ def summarize(
                             if sh.attempt is not None:
                                 case.ref_wrong = _flip(_decided(sh.attempt.correct))
                         if sh.attempt is not None and sh.attempt.error is None:
-                            c = _attempt_cost(sh.attempt)
-                            if c is None:
+                            ref_cost = _attempt_cost(sh.attempt)
+                            if ref_cost is None:
                                 n_ref_cost_unknown += 1
                             elif sh.audit_tier == reference_tier:
-                                ref_costs.append(c)
+                                ref_costs.append(ref_cost)
                                 ref_weights.append(1.0 / case.pi)
                     elif sh.status == "pending":
                         case.state = "pending"
@@ -592,8 +592,7 @@ def summarize(
         if graded_skipped
         else None
     )
-    graded_decisions = [_decided(d.correct) for d in decisions]
-    graded_decisions = [g for g in graded_decisions if g is not None]
+    graded_decisions = [g for g in (_decided(d.correct) for d in decisions) if g is not None]
     served_accuracy = (
         wilson(sum(graded_decisions), len(graded_decisions), level) if graded_decisions else None
     )

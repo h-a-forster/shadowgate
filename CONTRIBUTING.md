@@ -11,6 +11,7 @@ shadowgate uses [uv](https://docs.astral.sh/uv/) for development. Python 3.11 or
 uv sync --all-groups      # create .venv with the package (editable) and dev tools
 uv run pytest             # run the test suite
 uv run ruff check .       # lint
+uv run mypy               # type-check (config in pyproject.toml)
 ```
 
 Optional extras (for example the Anthropic SDK) can be added with `uv sync --all-groups --extra anthropic`.
@@ -68,7 +69,7 @@ Each pluggable family is built by a factory function `from_spec(spec, **deps)` t
 - Keep pull requests focused on one change; open an issue first for larger features.
 - Write commit messages in the imperative mood with a short summary line
   (for example "Add regex comparator").
-- Before opening a pull request, make sure `uv run pytest` and `uv run ruff check .` pass.
+- Before opening a pull request, make sure `uv run pytest`, `uv run ruff check .` and `uv run mypy` pass.
 - Update `CHANGELOG.md` under "Unreleased" for user-visible changes, and update the docs when
   behavior or configuration changes.
 - CI runs lint, the test matrix (Linux, Windows, macOS; Python 3.11 to 3.13) and a build smoke

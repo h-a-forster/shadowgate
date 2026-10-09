@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint (ruff)
+    name: Lint and type-check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,6 +29,8 @@ jobs:
           python-version: "3.12"
       - run: uv sync --all-groups
       - run: uv run ruff check .
+      - name: typecheck
+        run: uv run mypy
 
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})

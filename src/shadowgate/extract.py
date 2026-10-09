@@ -408,17 +408,17 @@ class Choice:
 
         # 2. \boxed{C}
         for b in reversed(boxed):
-            m = _LETTER_LINE_RE.fullmatch(b)
-            if m and self._ok(m.group(1)):
-                return m.group(1).upper()
+            bm = _LETTER_LINE_RE.fullmatch(b)
+            if bm and self._ok(bm.group(1)):
+                return bm.group(1).upper()
 
         # 3. a line that is just a letter, or a single chosen-option line
         lines = [ln for ln in s.splitlines() if ln.strip()]
         for ln in reversed(lines):
-            m = _LETTER_LINE_RE.fullmatch(ln)
-            if m and self._ok(m.group(1)):
-                return m.group(1).upper()
-        options = [m.group(1) for ln in lines if (m := _OPTION_LINE_RE.match(ln))]
+            lm = _LETTER_LINE_RE.fullmatch(ln)
+            if lm and self._ok(lm.group(1)):
+                return lm.group(1).upper()
+        options = [om.group(1) for ln in lines if (om := _OPTION_LINE_RE.match(ln))]
         options = [o for o in options if self._ok(o)]
         if len(options) == 1:
             return options[0]

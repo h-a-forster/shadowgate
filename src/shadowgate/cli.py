@@ -260,13 +260,13 @@ def _setup_console() -> None:
             reconfigure(errors="replace")
 
 
-class _StderrHandler(logging.StreamHandler):  # type: ignore[type-arg]
+class _StderrHandler(logging.StreamHandler):
     """Writes to whatever ``sys.stderr`` is at emit time (works under capture/redirects)."""
 
     def __init__(self) -> None:
         super().__init__(sys.stderr)
 
-    @property  # type: ignore[override]
+    @property
     def stream(self) -> Any:
         return sys.stderr
 

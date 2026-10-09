@@ -347,7 +347,7 @@ class _Table:
         sizes = [len(g) + 1 for g in grids]
         buckets = [
             tuple(
-                0 if it.scores[j] is None else bisect.bisect_right(grids[j], it.scores[j])
+                0 if (sc := it.scores[j]) is None else bisect.bisect_right(grids[j], sc)
                 for j in range(m)
             )
             for it in items
@@ -846,13 +846,13 @@ def fit_isotonic(
     if len(scores) != len(labels):
         raise ValueError(f"scores and labels differ in length ({len(scores)} vs {len(labels)})")
     pairs: list[tuple[float, float]] = []
-    for s, y in zip(scores, labels, strict=True):
+    for s, label in zip(scores, labels, strict=True):
         x = float(s)
         if not math.isfinite(x):
             raise ValueError(f"scores must be finite, got {s!r}")
-        if y not in (0, 1):  # True/False compare equal to 1/0
-            raise ValueError(f"labels must be booleans or 0/1, got {y!r}")
-        pairs.append((x, float(y)))
+        if label not in (0, 1):  # True/False compare equal to 1/0
+            raise ValueError(f"labels must be booleans or 0/1, got {label!r}")
+        pairs.append((x, float(label)))
     if not pairs:
         raise InsufficientData("fit_isotonic needs at least one observation")
     pairs.sort()

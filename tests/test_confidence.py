@@ -161,6 +161,21 @@ def test_parse_last_line_wins_and_markdown() -> None:
     assert conf.parse_confidence("confidence = 70%")[0] == pytest.approx(0.7)
 
 
+@pytest.mark.parametrize(
+    ("line", "score"),
+    [
+        ("Confidence - 0.85", 0.85),
+        ("**Confidence** — 85%", 0.85),
+        ("Confidence – 0.6", 0.6),
+        ("Confidence-based check passed", None),
+    ],
+)
+def test_parse_dash_separator(line: str, score: float | None) -> None:
+    # same separators as extract.is_confidence_line, so a stripped line is also a parsed line
+    got = conf.parse_confidence(f"42\n{line}")[0]
+    assert got == (pytest.approx(score) if score is not None else None)
+
+
 def test_parse_monitor_labels() -> None:
     assert conf.parse_confidence("P(correct): 0.3", monitor=True)[0] == pytest.approx(0.3)
     assert conf.parse_confidence("p( correct ) = 30%", monitor=True)[0] == pytest.approx(0.3)

@@ -27,6 +27,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import ClassVar
 
 from shadowgate import __version__
 from shadowgate.audit import AuditSummary, BinSummary
@@ -38,6 +39,7 @@ from shadowgate.svg import (
     Marker,
     RefLine,
     Series,
+    Style,
     bar_with_ci,
     format_value,
     line_chart,
@@ -263,9 +265,54 @@ Segment = tuple[str, bool]  # (text, strong)
 
 
 @dataclass
-class _Block:
-    kind: str  # p | cards | table | charts | rec | list | h3 | badge | muted
-    data: object
+class _Para:
+    kind: ClassVar[str] = "p"
+    data: list[Segment]
+
+
+@dataclass
+class _Badge:
+    kind: ClassVar[str] = "badge"
+    data: tuple[str, str, str]  # (status, label, why)
+
+
+@dataclass
+class _Cards:
+    kind: ClassVar[str] = "cards"
+    data: list[tuple[str, str, str]]  # (label, value, sub)
+
+
+@dataclass
+class _TableBlock:
+    kind: ClassVar[str] = "table"
+    data: _Table
+
+
+@dataclass
+class _Charts:
+    kind: ClassVar[str] = "charts"
+    data: list[tuple[str, str]]  # (svg, caption)
+
+
+@dataclass
+class _Rec:
+    kind: ClassVar[str] = "rec"
+    data: tuple[list[tuple[str, str]], str]  # (rows, note)
+
+
+@dataclass
+class _List:
+    kind: ClassVar[str] = "list"
+    data: list[str]
+
+
+@dataclass
+class _H3:
+    kind: ClassVar[str] = "h3"
+    data: str
+
+
+_Block = _Para | _Badge | _Cards | _TableBlock | _Charts | _Rec | _List | _H3
 
 
 @dataclass
@@ -276,7 +323,7 @@ class _Section:
 
 
 def _p(*segs: Segment | str) -> _Block:
-    return _Block("p", [(s, False) if isinstance(s, str) else s for s in segs])
+    return _Para([(s, False) if isinstance(s, str) else s for s in segs])
 
 
 # --------------------------------------------------------------------------- shared content
@@ -535,7 +582,12 @@ def _bins_chart(summary: AuditSummary, *, narrow: bool = False) -> str | None:
     use_err = not use_dis and any(b.error is not None for b in bins)
     if not (use_dis or use_err):
         return None
-    cats, vals, lows, highs, notes, styles = [], [], [], [], [], []
+    cats: list[str] = []
+    vals: list[float | None] = []
+    lows: list[float | None] = []
+    highs: list[float | None] = []
+    notes: list[str] = []
+    styles: list[Style] = []
     tol = summary.tolerance
     for b in bins:
         if narrow and b.label != "no score" and math.isfinite(b.lo):
@@ -853,7 +905,8 @@ def _frontier_table(sweep: SweepResult) -> _Table:
     chosen, total = _frontier_rows(sweep)
     non_final = list(sweep.tiers[:-1])
     ri = _rec_index(sweep)
-    rows, highlight = [], set()
+    rows: list[list[str]] = []
+    highlight: set[int] = set()
     for i in chosen:
         p = sweep.points[i]
         if i == ri:
@@ -1005,10 +1058,10 @@ def _sections(
     s = summary
     label, why = _status_parts(s)
     secs: list[_Section] = []
-    head = [
-        _Block("badge", (s.status, label, why)),
-        _Block("p", _headline_segments(s)),
-        _Block("cards", _cards(s)),
+    head: list[_Block] = [
+        _Badge((s.status, label, why)),
+        _Para(_headline_segments(s)),
+        _Cards(_cards(s)),
     ]
     secs.append(_Section("summary", "Summary", head))
 
@@ -1016,15 +1069,14 @@ def _sections(
     if s.n_skipped == 0:
         bins_blocks.append(_p("No skipped cases: there is nothing to break down by confidence."))
     else:
-        bins_blocks.append(_Block("table", _bins_table(s)))
+        bins_blocks.append(_TableBlock(_bins_table(s)))
         if charts:
             chart = _bins_chart(s)
             narrow = _bins_chart(s, narrow=True)
             if chart and narrow:
                 chart = _responsive(chart, narrow)
                 bins_blocks.append(
-                    _Block(
-                        "charts",
+                    _Charts(
                         [
                             (
                                 chart,
@@ -1042,9 +1094,9 @@ def _sections(
             "tiers",
             "Tier usage and costs",
             [
-                _Block("table", _tier_table(s)),
-                _Block("table", _coverage_table(s)),
-                _Block("table", _cost_table(s)),
+                _TableBlock(_tier_table(s)),
+                _TableBlock(_coverage_table(s)),
+                _TableBlock(_cost_table(s)),
             ],
         )
     )
@@ -1065,8 +1117,7 @@ def _sections(
         blocks.append(_p(intro))
         if charts:
             blocks.append(
-                _Block(
-                    "charts",
+                _Charts(
                     [
                         (
                             _responsive(_pareto_chart(sweep), _pareto_chart(sweep, narrow=True)),
@@ -1077,22 +1128,22 @@ def _sections(
                 )
             )
         rows, note = _rec_rows(sweep)
-        blocks.append(_Block("rec", (rows, note)))
-        blocks.append(_Block("table", _baselines_table(sweep)))
+        blocks.append(_Rec((rows, note)))
+        blocks.append(_TableBlock(_baselines_table(sweep)))
         if sweep.frontier:
-            blocks.append(_Block("table", _frontier_table(sweep)))
+            blocks.append(_TableBlock(_frontier_table(sweep)))
         if sweep.calibration:
-            blocks.append(_Block("h3", "Calibration"))
-            blocks.append(_Block("table", _calibration_table(sweep)))
+            blocks.append(_H3("Calibration"))
+            blocks.append(_TableBlock(_calibration_table(sweep)))
             if charts:
-                blocks.append(_Block("charts", _calibration_charts(sweep, s.tolerance)))
+                blocks.append(_Charts(_calibration_charts(sweep, s.tolerance)))
         secs.append(_Section("sweep", "Threshold sweep", blocks))
 
     notes = _notes(s, sweep)
     cav: list[_Block] = []
     if notes:
-        cav.append(_Block("list", notes))
-    cav.append(_Block("h3", "Methodology"))
+        cav.append(_List(notes))
+    cav.append(_H3("Methodology"))
     cav.append(_p(METHODOLOGY))
     secs.append(_Section("caveats", "Caveats", cav))
     return secs
@@ -1255,10 +1306,10 @@ def _html_segments(segs: Sequence[Segment]) -> str:
 
 
 def _html_block(b: _Block) -> str:
-    if b.kind == "p":
-        return f"<p>{_html_segments(b.data)}</p>"  # type: ignore[arg-type]
-    if b.kind == "badge":
-        status, label, why = b.data  # type: ignore[misc]
+    if isinstance(b, _Para):
+        return f"<p>{_html_segments(b.data)}</p>"
+    if isinstance(b, _Badge):
+        status, label, why = b.data
         cls = {
             "ok": "ok",
             "breach": "breach",
@@ -1270,35 +1321,33 @@ def _html_block(b: _Block) -> str:
             f'<div class="status"><span class="badge badge-{cls}" role="status">'
             f"{_e(label)}</span><span>{_e(why)}</span></div>"
         )
-    if b.kind == "cards":
+    if isinstance(b, _Cards):
         items = []
-        for label, value, sub in b.data:  # type: ignore[attr-defined]
+        for label, value, sub in b.data:
             subhtml = f'<dd class="sub">{_e(sub)}</dd>' if sub else ""
             items.append(
                 f'<div class="card"><dt>{_e(label)}</dt><dd>{_e(value)}</dd>{subhtml}</div>'
             )
         return f'<dl class="cards">{"".join(items)}</dl>'
-    if b.kind == "table":
-        return _html_table(b.data)  # type: ignore[arg-type]
-    if b.kind == "charts":
-        figs = [f"<figure>{svg}<figcaption>{_e(cap)}</figcaption></figure>" for svg, cap in b.data]  # type: ignore[attr-defined]
+    if isinstance(b, _TableBlock):
+        return _html_table(b.data)
+    if isinstance(b, _Charts):
+        figs = [f"<figure>{svg}<figcaption>{_e(cap)}</figcaption></figure>" for svg, cap in b.data]
         if len(figs) == 1:
             return figs[0]
         return f'<div class="charts">{"".join(figs)}</div>'
-    if b.kind == "rec":
-        rows, note = b.data  # type: ignore[misc]
+    if isinstance(b, _Rec):
+        rows, note = b.data
         body = "".join(f"<dt>{_e(k)}</dt><dd>{_e(v)}</dd>" for k, v in rows)
         dl = f"<dl>{body}</dl>" if rows else ""
         return (
             f'<section class="rec" aria-labelledby="rec-h"><h3 id="rec-h">Recommendation'
             f'</h3>{dl}<p class="muted">{_e(note)}</p></section>'
         )
-    if b.kind == "list":
-        lis = "".join(f"<li>{_e(x)}</li>" for x in b.data)  # type: ignore[attr-defined]
+    if isinstance(b, _List):
+        lis = "".join(f"<li>{_e(x)}</li>" for x in b.data)
         return f'<ul class="notes">{lis}</ul>'
-    if b.kind == "h3":
-        return f"<h3>{_e(b.data)}</h3>"
-    return f"<p>{_e(b.data)}</p>"
+    return f"<h3>{_e(b.data)}</h3>"
 
 
 def render_html(
@@ -1341,8 +1390,8 @@ def render_html(
         parts.append(f'<section id="{_e(sec.id)}" aria-labelledby="{_e(sec.id)}-h">')
         parts.append(f'<h2 id="{_e(sec.id)}-h">{_e(sec.title)}</h2>')
         for b in sec.blocks:
-            if sec.id == "summary" and b.kind == "p":
-                parts.append(f'<p class="lede">{_html_segments(b.data)}</p>')  # type: ignore[arg-type]
+            if sec.id == "summary" and isinstance(b, _Para):
+                parts.append(f'<p class="lede">{_html_segments(b.data)}</p>')
             else:
                 parts.append(_html_block(b))
         parts.append("</section>")
@@ -1392,32 +1441,30 @@ def _md_table(t: _Table) -> str:
 
 
 def _md_block(b: _Block) -> str:
-    if b.kind == "p":
-        return "".join(f"**{_md(t.strip())}**" if strong else _md(t) for t, strong in b.data)  # type: ignore[attr-defined]
-    if b.kind == "badge":
-        _, label, why = b.data  # type: ignore[misc]
+    if isinstance(b, _Para):
+        return "".join(f"**{_md(t.strip())}**" if strong else _md(t) for t, strong in b.data)
+    if isinstance(b, _Badge):
+        _, label, why = b.data
         return f"**Status: {_md(label)}**" + (f" — {_md(why)}" if why else "")
-    if b.kind == "cards":
+    if isinstance(b, _Cards):
         return "\n".join(
             f"- **{_md(label)}:** {_md(value)}" + (f" ({_md(sub)})" if sub else "")
             for label, value, sub in b.data
-        )  # type: ignore[attr-defined]
-    if b.kind == "table":
-        return _md_table(b.data)  # type: ignore[arg-type]
-    if b.kind == "charts":
+        )
+    if isinstance(b, _TableBlock):
+        return _md_table(b.data)
+    if isinstance(b, _Charts):
         return "_Charts are included in the HTML report._"
-    if b.kind == "rec":
-        rows, note = b.data  # type: ignore[misc]
+    if isinstance(b, _Rec):
+        rows, note = b.data
         lines = ["### Recommendation", ""]
         lines += [f"- **{_md(k)}:** {_md(v)}" for k, v in rows]
         if note:
             lines += ["", f"_{_md(note)}_"] if rows else [_md(note)]
         return "\n".join(lines)
-    if b.kind == "list":
-        return "\n".join(f"- {_md(x)}" for x in b.data)  # type: ignore[attr-defined]
-    if b.kind == "h3":
-        return f"### {_md(b.data)}"
-    return _md(b.data)
+    if isinstance(b, _List):
+        return "\n".join(f"- {_md(x)}" for x in b.data)
+    return f"### {_md(b.data)}"
 
 
 def render_markdown(

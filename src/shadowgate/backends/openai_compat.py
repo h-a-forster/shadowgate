@@ -51,7 +51,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Refuse every redirect: following one would re-send the Authorization header (urllib
     keeps it for any host) and turn the POST into a GET whose answer is not ours."""
 
-    def redirect_request(  # type: ignore[override]
+    def redirect_request(
         self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
     ) -> None:
         try:
@@ -357,6 +357,7 @@ class OpenAICompatBackend:
             output_tokens=_int(u.get("completion_tokens")),
             cache_read_tokens=cached,
         )
+        cost: float | None
         if self.pricing is not None:
             cost = self.pricing.cost(usage)
         else:

@@ -798,9 +798,9 @@ def xy_chart(
     xs: list[float] = []
     ys: list[float] = []
     for _, _, _, runs in prepared:
-        for r in runs:
-            xs.extend(p[0] for p in r)
-            ys.extend(p[1] for p in r)
+        for run in runs:
+            xs.extend(p[0] for p in run)
+            ys.extend(p[1] for p in run)
     for _, x, y in mk:
         xs.append(x)
         ys.append(y)
@@ -1020,14 +1020,14 @@ def xy_chart(
         body.append(f'<g class="sg-series"><title>{_esc(s.name)}</title>')
         if kind == "scatter":
             pts = runs[0]
-            r = s.size if s.size is not None else (2.5 if len(pts) > 300 else 3.5)
+            rad = s.size if s.size is not None else (2.5 if len(pts) > 300 else 3.5)
             op = s.opacity if s.opacity is not None else (0.55 if len(pts) > 300 else 0.85)
             body.append(f'<g {_paint(fill=key)} fill-opacity="{_f(op)}">')
             for x, y in pts:
                 if s.marker == "circle":
-                    body.append(f'<circle cx="{_f(sx(x))}" cy="{_f(sy(y))}" r="{_f(r)}"/>')
+                    body.append(f'<circle cx="{_f(sx(x))}" cy="{_f(sy(y))}" r="{_f(rad)}"/>')
                 else:
-                    body.append(_shape(s.marker, sx(x), sy(y), r, ""))
+                    body.append(_shape(s.marker, sx(x), sy(y), rad, ""))
             body.append("</g>")
         else:
             segs = []
@@ -1040,17 +1040,18 @@ def xy_chart(
                         d += f"L{_f(sx(x1))} {_f(sy(y1))}"
                 segs.append(d)
             dash = f' stroke-dasharray="{_DASH}"' if s.dashed else ""
-            op = f' stroke-opacity="{_f(s.opacity)}"' if s.opacity is not None else ""
+            op_attr = f' stroke-opacity="{_f(s.opacity)}"' if s.opacity is not None else ""
             body.append(
                 f'<path d="{"".join(segs)}" fill="none" stroke-width="{_f(s.width)}"'
-                f' stroke-linejoin="round" stroke-linecap="round" {_paint(stroke=key)}{dash}{op}/>'
+                f' stroke-linejoin="round" stroke-linecap="round" {_paint(stroke=key)}{dash}'
+                f"{op_attr}/>"
             )
-            if s.show_points or all(len(r) == 1 for r in runs):
-                r = s.size if s.size is not None else 3.0
+            if s.show_points or all(len(run) == 1 for run in runs):
+                rad = s.size if s.size is not None else 3.0
                 body.append(f"<g {_paint(fill=key)}>")
                 for run in runs:
                     for x, y in run:
-                        body.append(_shape(s.marker, sx(x), sy(y), r, ""))
+                        body.append(_shape(s.marker, sx(x), sy(y), rad, ""))
                 body.append("</g>")
         body.append("</g>")
     body.append("</g>")
@@ -1385,6 +1386,7 @@ def bar_with_ci(
         yy = sy(v)
         key = _color_key(r.style, 0)
         dash = f' stroke-dasharray="{_DASH}"' if r.dashed else ""
+        lx: float
         lx, ly, anchor = px1 - 4, yy - 5, "end"
         if r.label:
             opts = [

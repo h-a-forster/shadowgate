@@ -120,7 +120,10 @@ _LABELS = {
 def _label_regex(labels: Sequence[str]) -> re.Pattern[str]:
     alt = "|".join(_LABELS[label] for label in labels)
     return re.compile(
-        rf"^[\s>#*_`-]*(?:{alt})[\s*_`]*[:=]\s*(.*?)\s*$",
+        rf"^[\s>#*_`-]*(?:{alt})[\s*_`]*"
+        # ":" or "=", or a dash followed by a number or a word level ("Confidence - 0.85")
+        r"(?:[:=]|[-–—](?=[\s*_`]*(?:[\d.]|(?:very\s+)?(?:high|medium|low)\b)))"
+        r"\s*(.*?)\s*$",
         re.IGNORECASE | re.MULTILINE,
     )
 
@@ -725,7 +728,7 @@ def from_spec(
     if not isinstance(spec, Mapping):
         raise ConfigError(f"confidence spec must be a table, got {type(spec).__name__}")
     kind = spec.get("type")
-    if kind not in _ALLOWED_KEYS:
+    if not isinstance(kind, str) or kind not in _ALLOWED_KEYS:
         raise ConfigError(
             f"unknown confidence type {kind!r}; expected one of {sorted(_ALLOWED_KEYS)}"
         )

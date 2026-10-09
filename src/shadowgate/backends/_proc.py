@@ -13,6 +13,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Mapping, Sequence
@@ -38,7 +39,7 @@ class ProcResult:
 
 def kill_tree(proc: subprocess.Popen[bytes]) -> None:
     """Best-effort kill of ``proc`` and all of its descendants."""
-    if os.name == "nt":
+    if sys.platform == "win32":
         with contextlib.suppress(OSError, subprocess.SubprocessError):
             subprocess.run(
                 ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
@@ -50,7 +51,7 @@ def kill_tree(proc: subprocess.Popen[bytes]) -> None:
             )
     else:
         with contextlib.suppress(OSError, AttributeError):
-            os.killpg(proc.pid, signal.SIGKILL)  # type: ignore[attr-defined]
+            os.killpg(proc.pid, signal.SIGKILL)
     with contextlib.suppress(OSError):
         proc.kill()
 
@@ -91,11 +92,11 @@ def run_process(
     ``timeout`` seconds (the whole process tree is killed first), ``OSError`` when it cannot be
     started.
     """
-    kwargs: dict[str, object] = {}
-    if os.name == "nt":
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    # Own process group: Windows via a creation flag, POSIX via a new session.
+    if sys.platform == "win32":
+        creationflags, new_session = subprocess.CREATE_NEW_PROCESS_GROUP, False
     else:
-        kwargs["start_new_session"] = True
+        creationflags, new_session = 0, True
     deadline = time.monotonic() + timeout
     proc = subprocess.Popen(  # noqa: S603 - argv is built by the caller, no shell
         argv,
@@ -104,7 +105,8 @@ def run_process(
         stderr=subprocess.PIPE,
         cwd=cwd,
         env=dict(env) if env is not None else None,
-        **kwargs,  # type: ignore[arg-type]
+        creationflags=creationflags,
+        start_new_session=new_session,
     )
     assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     out: list[bytes] = []

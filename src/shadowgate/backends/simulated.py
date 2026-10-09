@@ -294,11 +294,11 @@ def _wrong_options(ref: str) -> list[str]:
     m = _FLOAT_RE.match(ref)
     if m:
         decimals = len(m.group(1))
-        value = float(ref)
+        fvalue = float(ref)
         step = 10.0**-decimals
         deltas = (step, -step, 2 * step, -2 * step, 5 * step, -5 * step, 1.0, -1.0)
-        outs = [f"{value + d:.{decimals}f}" for d in deltas]
-        return [s for s in dict.fromkeys(outs) if float(s) != value]
+        outs = [f"{fvalue + d:.{decimals}f}" for d in deltas]
+        return [s for s in dict.fromkeys(outs) if float(s) != fvalue]
     m = _LETTER_RE.match(ref)
     if m:
         letter = m.group(1)
