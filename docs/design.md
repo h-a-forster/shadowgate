@@ -182,7 +182,9 @@ and `fallback_text=True`, else `equivalent=None`); `choice` (letters); `contains
 candidate after normalisation); `regex` (target is a pattern); `judge` (`backend` name from
 `backends`, `prompt` template with `{question}`, `{candidate}`, `{target}`; parses
 `VERDICT: EQUIVALENT|DIFFERENT`; unparseable -> None; the judge call goes in `Judgement.calls`).
-Empty candidate is never equivalent to a non-empty target (equivalent=False).
+Empty candidate is never equivalent to a non-empty target (equivalent=False); two empty answers
+are undecidable (equivalent=None). `numeric` compares two integers exactly (`1000000` !=
+`1000001`); tolerances apply only when either side is a decimal, fraction or scientific value.
 
 ## confidence.py
 
@@ -194,7 +196,9 @@ def from_spec(spec: Mapping, *, backends: Mapping[str, Backend], comparator: Com
 ```
 * `verbal` - `prepare` appends an instruction to end with `CONFIDENCE: <number between 0 and 1>`
   (customisable `instruction`); `estimate` parses the last such line (accepts `0.85`, `85%`,
-  `85/100`); clamps to [0, 1]; missing -> score None.
+  `85/100`, `8 out of 10`, `0,85`; a bare integer in (1, 100] is a percentage, a bare
+  non-integer there such as `1.5` is ambiguous -> None; trailing text other than punctuation or
+  one parenthetical -> None); clamps to [0, 1]; missing -> score None.
 * `logprob` - requires `want_logprobs`; `prepare` sets it; `aggregate="mean"|"min"|"geo_mean"` of
   token probabilities (optionally only over the answer line's tokens is out of scope); None if the
   completion has no logprobs.
@@ -205,8 +209,12 @@ def from_spec(spec: Mapping, *, backends: Mapping[str, Backend], comparator: Com
   `P(correct): <number>`; default prompt asks for a calibrated probability; parse like verbal.
   The monitor call goes in `calls`.
 * `callable` - wraps a Python `fn(task, completion, answer) -> float | None` (API only).
+* Every estimator returns score None (`detail["reason"] == "empty answer"`), with no calls, when
+  the primary answer is empty. Self-consistency counts empty sample answers as disagreeing and a
+  sample whose backend raises (any exception) as failed, keeping the other samples' calls.
 * `combine` - `members=[spec, ...]`, `method="mean"|"min"|"max"|"weighted"` with `weights`; any
-  member None -> combined None unless `ignore_missing=True`. Calls concatenate.
+  member None -> combined None unless `ignore_missing=True`. Calls concatenate. A member that
+  raises counts as None (error in `detail["members"]`); the other members' calls are kept.
 * `calibrated` - wraps another estimator with a fitted monotone map (`points=[[x, y], ...]`,
   piecewise-linear interpolation). `sweep.fit_isotonic` produces the points.
 

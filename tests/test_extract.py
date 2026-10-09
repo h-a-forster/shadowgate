@@ -354,3 +354,50 @@ def test_from_spec_options_applied() -> None:
     ex = from_spec({"type": "final_line", "prefix": "RESULT:", "alt_prefixes": ["Out:"]})
     assert ex.extract("Out: 5") == "5"
     assert ex.extract("RESULT: 6") == "6"
+
+
+# --------------------------------------------------------------------------- regressions
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # answers that merely mention confidence are kept whole
+        ("ANSWER: 95% confidence interval", "95% confidence interval"),
+        ("ANSWER: [1.2, 3.4] at 95% confidence", "[1.2, 3.4] at 95% confidence"),
+        ("ANSWER: vote of no confidence: 3 votes", "vote of no confidence: 3 votes"),
+        ("ANSWER: confidence intervals", "confidence intervals"),
+        ("ANSWER: Paris (confidence: 0.8) because of X", "Paris (confidence: 0.8) because of X"),
+        # a single trailing value is still cut
+        ("ANSWER: 42 (confidence: 0.8)", "42"),
+        ("ANSWER: 42 | confidence 0.8", "42"),
+        ("ANSWER: 42 confidence=85%", "42"),
+        ("ANSWER: 42, confidence: 85%.", "42"),
+        ("ANSWER: 42 [conf: 0.7]", "42"),
+        ("ANSWER: 42 (confidence: high)", "42"),
+        ("ANSWER: 42 (confidence 8/10)", "42"),
+        ("ANSWER: 42 (90% confidence)", "42"),
+        ("ANSWER: 42 with a 90% confidence", "42"),
+        ("ANSWER: 42 - confidence - 0.85", "42"),
+        # the fallback never returns the bare marker
+        ("ANSWER: (confidence: 0.9)", ""),
+        ("ANSWER:", ""),
+        ("**Answer:**", ""),
+        ("The result\nANSWER: (confidence 0.9)", "The result"),
+    ],
+)
+def test_final_line_inline_confidence(text: str, expected: str) -> None:
+    assert FinalLine().extract(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("So x = 12, I'm 90% confident", "12"),
+        ("ANSWER: 42 (confidence: 0.9)", "42"),
+        ("ANSWER: [1.2, 3.4] at 95% confidence", "95%"),
+        ("ANSWER: vote of no confidence: 3 votes", "3"),
+    ],
+)
+def test_last_number_inline_confidence(text: str, expected: str) -> None:
+    assert LastNumber().extract(text) == expected

@@ -66,14 +66,23 @@ _CONF_LINE_RE = re.compile(
     r"(?:confidence|conf\.?)\b(?:[^:=\n]{0,25}[:=]|[\s*_]*(?:level|score)?\s*(?:of\s+)?[\d.])",
     re.IGNORECASE,
 )
-# A trailing confidence segment on an answer line: "42 (confidence: 0.9)",
-# "42 | CONFIDENCE 0.9", "42 with 90% confidence".
+# A trailing confidence segment on an answer line. It must end the line and carry exactly one
+# value (a number, percentage, ratio or high/medium/low), so answers that merely mention
+# confidence ("95% confidence interval", "[1.2, 3.4] at 95% confidence", "vote of no
+# confidence: 3 votes") are left alone. Cut: "42 (confidence: 0.9)", "42 | CONFIDENCE 0.9",
+# "42 confidence=85%", "42 with 90% confidence", "x = 12, I'm 90% confident".
+_CONF_VALUE = r"(?:(?:\d+(?:\.\d*)?|\.\d+)\s*%?(?:\s*/\s*\d+(?:\.\d+)?)?|high|medium|low)"
 _CONF_INLINE_RE = re.compile(
-    r"[\s,;|(\[*_\-]*\b(?:confidence|conf\.?)\b(?:\s+(?:level|score))?\s*[*_]*\s*"
-    r"(?:[:=]|(?:of\s+)?(?=[\d.]))"
-    r".*$"
-    r"|[\s,;|(\[\-]*(?:\bwith\s+(?:a\s+)?\d+(?:\.\d+)?\s*%?|\b\d+(?:\.\d+)?\s*%)"
-    r"\s+(?:confidence|confident)\b.*$",
+    # "<sep> confidence[ level|score][:=-] <value>"
+    r"(?:\s*[,;|]\s*|\s+[-–—]\s+|\s*[(\[]\s*|\s+)[*_]*(?:confidence|conf\.?)(?:\s+(?:level|score))?"
+    rf"[*_]*\s*(?:[:=\-]\s*|of\s+)?[*_]*{_CONF_VALUE}[*_]*\s*[)\]]?"
+    r"[\s.]*$"
+    # "with [a] <value> confidence|certainty"
+    r"|\s*[(\[]?\s*\bwith\s+(?:a\s+)?(?:\d+(?:\.\d+)?\s*%?)\s+(?:confidence|certainty)\b"
+    r"\s*[)\]]?[\s.]*$"
+    # "<sep> [and] [I'm|I am] <pct> confident|confidence"
+    r"|(?:\s*[,;|]\s*|\s*[(\[]\s*|\s+-\s+)(?:and\s+)?(?:i['’]?m\s+|i\s+am\s+)?\d+(?:\.\d+)?\s*%"
+    r"\s+(?:confidence|confident)\s*[)\]]?[\s.]*$",
     re.IGNORECASE,
 )
 _MATH_WRAP_RE = re.compile(r"\$\$(.+)\$\$|\$([^$]+)\$|\\\((.+)\\\)|\\\[(.+)\\\]", re.DOTALL)
@@ -201,11 +210,13 @@ class FinalLine:
     ``("Final answer:",)``) are matched case-insensitively and tolerate markdown decoration such
     as ``**Answer:**`` or ``**Answer**:``. Markers at the start of a line (after optional
     bullets, ``#`` or ``>``) win over markers inside prose; among those the last one wins.
-    Only the rest of that line is used; an inline ``CONFIDENCE: ...`` tail is cut. When the
-    marker's line is empty the next non-empty, non-confidence line is used.
+    Only the rest of that line is used; a trailing confidence segment holding a single value
+    (``(confidence: 0.8)``, ``| confidence 0.8``, ``confidence=85%``, ``with 90% confidence``)
+    is cut, but text that merely mentions confidence (``95% confidence interval``) is kept.
+    When the marker's line is empty the next non-empty, non-confidence line is used.
 
     Fallback when no marker yields text: the last ``\\boxed{...}``, else the last non-empty
-    line that is not a confidence line or a bare code fence / rule.
+    line that is not a confidence line, a bare code fence / rule, or a bare answer marker.
     """
 
     name = "final_line"
@@ -218,6 +229,7 @@ class FinalLine:
         body = "|".join(_prefix_pattern(p) for p in (prefix, *self.alt_prefixes))
         self._anywhere = re.compile(rf"(?:{body})", re.IGNORECASE)
         self._line_start = re.compile(rf"^[ \t>#\-]*(?:{body})", re.IGNORECASE | re.MULTILINE)
+        self._bare_marker = re.compile(rf"[\s>#\-*_]*(?:{body})[\s*_]*", re.IGNORECASE)
 
     def extract(self, text: str) -> str:
         return _safe(self._extract, text)
@@ -252,7 +264,7 @@ class FinalLine:
             if not line.strip() or is_confidence_line(line) or _FENCE_ONLY_RE.match(line):
                 continue
             ans = strip_markup(_BULLET_RE.sub("", _cut_confidence(line)))
-            if ans:
+            if ans and not self._bare_marker.fullmatch(ans):  # never return the marker itself
                 return ans
         return ""
 

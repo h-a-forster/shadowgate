@@ -16,9 +16,17 @@ Families:
 Verbal parsing rules (shared by :class:`Verbal` and :class:`Monitor`): the **last** line of the
 form ``CONFIDENCE: <value>`` (or ``P(correct): <value>`` for the monitor; case-insensitive,
 markdown emphasis tolerated) is used. ``<value>`` may be ``0.85``, ``.85``, ``85%``, ``85/100``,
-``8.5/10``. A bare number in ``(1, 100]`` is read as a percentage; anything larger, negative
-or unparseable gives ``None``. Ratios and percentages are clamped to [0, 1]. The words
-``high`` / ``medium`` / ``low`` map to :data:`WORD_SCORES` only when ``allow_words=True``.
+``8.5/10`` or ``8 out of 10``. A bare *integer* in ``(1, 100]`` is read as a percentage
+(``85`` -> 0.85); a bare non-integer in ``(1, 100]`` (``1.5``, ``8.5``) is ambiguous between a
+percentage and another scale and gives ``None``. ``0,85`` (a single ``0,<digits>`` decimal
+comma) is read as 0.85; any other comma (``1,5``) gives ``None``. Anything larger, negative or
+unparseable gives ``None``. The value may be followed only by closing punctuation and/or one
+parenthetical remark (``0.7 (fairly sure)``); any other trailing text (``0.8 or 0.9``) gives
+``None``. Ratios and percentages are clamped to [0, 1]. The words ``high`` / ``medium`` /
+``low`` map to :data:`WORD_SCORES` only when ``allow_words=True``.
+
+Every estimator returns ``score=None`` (``detail["reason"] == "empty answer"``) without
+making any call when the primary answer is empty or whitespace.
 """
 
 from __future__ import annotations
@@ -95,9 +103,12 @@ class _Extractor(Protocol):
 
 _NUM = r"(?:\d+(?:\.\d*)?|\.\d+)"
 _PCT_RE = re.compile(rf"^({_NUM})\s*%")
-_RATIO_RE = re.compile(rf"^({_NUM})\s*/\s*({_NUM})")
+_RATIO_RE = re.compile(rf"^({_NUM})\s*(?:/|\s+out\s+of\s+)\s*({_NUM})", re.IGNORECASE)
+_COMMA_RE = re.compile(r"^0,(\d+)(?![\d.,])")
 _PLAIN_RE = re.compile(rf"^({_NUM})(?!\d)")
 _WORD_RE = re.compile(r"^(high|medium|low)\b", re.IGNORECASE)
+# what may follow a value: closing punctuation and at most one parenthetical remark
+_TAIL_RE = re.compile(r"[\s.!;,)\]]*(?:\([^()]*\)[\s.!;,]*)?")
 _DECORATION = "*_`\"' \t"
 
 _LABELS = {
@@ -119,30 +130,42 @@ _MONITOR_LINE = _label_regex(["p_correct", "confidence"])
 
 
 def parse_confidence_value(raw: str, *, allow_words: bool = False) -> float | None:
-    """Parse the value part of a confidence line. Returns a score in [0, 1] or None."""
+    """Parse the value part of a confidence line. Returns a score in [0, 1] or None.
+
+    See the module docstring for the accepted forms and the ambiguity rules.
+    """
     s = raw.strip().strip(_DECORATION).strip()
     if not s:
         return None
+
+    def tail_ok(m: re.Match[str]) -> bool:
+        return _TAIL_RE.fullmatch(s[m.end() :]) is not None
+
     m = _PCT_RE.match(s)
     if m:
-        return _clamp(float(m.group(1)) / 100.0)
+        return _clamp(float(m.group(1)) / 100.0) if tail_ok(m) else None
     m = _RATIO_RE.match(s)
     if m:
         den = float(m.group(2))
-        if den <= 0:
+        if den <= 0 or not tail_ok(m):
             return None
         return _clamp(float(m.group(1)) / den)
+    m = _COMMA_RE.match(s)
+    if m:
+        return float("0." + m.group(1)) if tail_ok(m) else None
     m = _PLAIN_RE.match(s)
     if m:
+        if not tail_ok(m):
+            return None
         x = float(m.group(1))
         if x <= 1.0:
             return x
-        if x <= 100.0:
+        if x <= 100.0 and "." not in m.group(1):
             return x / 100.0
-        return None
+        return None  # > 100, or a non-integer in (1, 100]: ambiguous scale
     if allow_words:
         m = _WORD_RE.match(s)
-        if m:
+        if m and tail_ok(m):
             return WORD_SCORES[m.group(1).lower()]
     return None
 
@@ -168,11 +191,23 @@ def _clamp(x: float) -> float:
 
 
 def _fill(template: str, values: Mapping[str, str]) -> str:
-    """Substitute ``{name}`` placeholders without interpreting other braces."""
-    out = template
-    for key, value in values.items():
-        out = out.replace("{" + key + "}", value)
-    return out
+    """Substitute ``{name}`` placeholders in one pass, without interpreting other braces.
+
+    Substituted values are never rescanned, so e.g. ``{answer}`` inside the task prompt stays
+    literal.
+    """
+    if not values:
+        return template
+    pattern = re.compile(r"\{(" + "|".join(re.escape(k) for k in values) + r")\}")
+    return pattern.sub(lambda m: values[m.group(1)], template)
+
+
+def _is_empty(answer: str | None) -> bool:
+    return not (answer or "").strip()
+
+
+def _empty_result(name: str) -> ConfidenceResult:
+    return ConfidenceResult(name, None, detail={"reason": "empty answer"})
 
 
 def _confidence_tags(request: Request) -> dict[str, str]:
@@ -204,6 +239,8 @@ class Verbal:
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
+        if _is_empty(answer):
+            return _empty_result(self.name)
         score, raw = parse_confidence(completion.text, allow_words=self.allow_words)
         detail: dict[str, Any] = {"raw": raw}
         if raw is None:
@@ -236,6 +273,8 @@ class Logprob:
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
+        if _is_empty(answer):
+            return _empty_result(self.name)
         lps = completion.logprobs
         if not lps:
             return ConfidenceResult(
@@ -262,8 +301,10 @@ class SelfConsistency:
 
     ``score = (1 + agree) / (1 + successful_samples)``. Undecided comparisons
     (``equivalent=None``) count as disagreement and are reported in ``detail["undecided"]``.
-    Samples that raise :class:`BackendError` are skipped and counted in ``detail["failed"]``;
-    if every sample fails the score is None.
+    A sample whose extracted answer is empty counts as disagreeing without calling the
+    comparator (``detail["empty"]``). Samples whose backend call raises (any exception) are
+    skipped and counted in ``detail["failed"]``; calls from the other samples are kept. If
+    every sample fails the score is None. A comparator that raises counts as undecided.
     """
 
     def __init__(
@@ -289,7 +330,7 @@ class SelfConsistency:
     def prepare(self, request: Request) -> Request:
         return request
 
-    def _sample(self, backend: Backend, request: Request, i: int) -> Completion | BackendError:
+    def _sample(self, backend: Backend, request: Request, i: int) -> Completion | Exception:
         temp = self.temperature if self.temperature is not None else request.temperature
         req = dataclasses.replace(
             request, n_sample=i, temperature=temp, tags=_confidence_tags(request)
@@ -298,11 +339,16 @@ class SelfConsistency:
             return backend.complete(req)
         except BackendError as exc:
             return exc
+        except Exception as exc:  # a failed sample must not discard the other samples' calls
+            log.warning("self_consistency sample %d failed: %r", i, exc)
+            return exc
 
     def estimate(
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
+        if _is_empty(answer):
+            return _empty_result(self.name)
         idx = range(1, self.samples + 1)
         if self.concurrency > 1:
             with ThreadPoolExecutor(max_workers=min(self.concurrency, self.samples)) as pool:
@@ -314,16 +360,29 @@ class SelfConsistency:
         answers: list[str] = []
         votes: list[bool | None] = []
         errors: list[str] = []
-        agree = undecided = 0
+        agree = undecided = empty = 0
         for res in results:
             if isinstance(res, BackendError):
                 errors.append(str(res))
                 continue
+            if isinstance(res, Exception):
+                errors.append(f"{type(res).__name__}: {res}")
+                continue
             calls.append(res)
             sample_answer = self.extractor.extract(res.text)
-            judgement: Judgement = self.comparator.compare(task, sample_answer, answer)
-            calls.extend(judgement.calls)
             answers.append(sample_answer)
+            if _is_empty(sample_answer):
+                empty += 1
+                votes.append(False)
+                continue
+            try:
+                judgement: Judgement = self.comparator.compare(task, sample_answer, answer)
+            except Exception as exc:
+                errors.append(f"comparator {type(exc).__name__}: {exc}")
+                undecided += 1
+                votes.append(None)
+                continue
+            calls.extend(judgement.calls)
             votes.append(judgement.equivalent)
             if judgement.equivalent is True:
                 agree += 1
@@ -334,9 +393,10 @@ class SelfConsistency:
         detail: dict[str, Any] = {
             "samples": self.samples,
             "successful": ok,
-            "failed": len(errors),
+            "failed": self.samples - ok,
             "agree": agree,
             "undecided": undecided,
+            "empty": empty,
             "answers": answers,
             "votes": votes,
             "comparator": self.comparator.name,
@@ -387,6 +447,8 @@ class Monitor:
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
+        if _is_empty(answer):
+            return _empty_result(self.name)
         text = _fill(
             self.prompt,
             {"question": task.prompt, "answer": answer, "response": completion.text},
@@ -405,7 +467,22 @@ class Monitor:
             return ConfidenceResult(
                 self.name, None, detail={"error": str(exc), "backend": self.backend.name}
             )
-        score, raw = parse_confidence(reply.text, allow_words=self.allow_words, monitor=True)
+        except Exception as exc:  # unexpected backend failure: no reply, so no call to keep
+            log.warning("monitor backend %s failed: %r", self.backend.name, exc)
+            return ConfidenceResult(
+                self.name,
+                None,
+                detail={"error": f"{type(exc).__name__}: {exc}", "backend": self.backend.name},
+            )
+        try:
+            score, raw = parse_confidence(reply.text, allow_words=self.allow_words, monitor=True)
+        except Exception as exc:  # e.g. a malformed reply object; keep the paid call
+            return ConfidenceResult(
+                self.name,
+                None,
+                calls=(reply,),
+                detail={"error": f"{type(exc).__name__}: {exc}", "backend": self.backend.name},
+            )
         detail: dict[str, Any] = {"raw": raw, "backend": self.backend.name}
         if raw is None:
             detail["reason"] = "no P(correct) line"
@@ -439,6 +516,8 @@ class CallableEstimator:
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
+        if _is_empty(answer):
+            return _empty_result(self.name)
         value = self.fn(task, completion, answer)
         if value is None:
             return ConfidenceResult(self.name, None, detail={"reason": "function returned None"})
@@ -463,6 +542,9 @@ class Combine:
 
     Any member None -> combined None, unless ``ignore_missing=True`` in which case missing
     members are dropped (weights renormalised over the rest); all missing -> None.
+
+    A member that raises counts as a missing score (its error is in that member's
+    ``detail["members"][i]["error"]``); calls made by the other members are kept.
     """
 
     def __init__(
@@ -508,12 +590,23 @@ class Combine:
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
-        results = [m.estimate(task, request, completion, answer, backend) for m in self.members]
+        if _is_empty(answer):
+            return _empty_result(self.name)
+        results: list[ConfidenceResult] = []
+        member_detail: list[dict[str, Any]] = []
+        for m in self.members:
+            try:
+                r = m.estimate(task, request, completion, answer, backend)
+            except Exception as exc:  # keep the calls already made by the other members
+                log.warning("combine member %s failed: %r", m.name, exc)
+                r = ConfidenceResult(m.name, None)
+                error = f"{type(exc).__name__}: {exc}"
+                member_detail.append({"estimator": m.name, "score": None, "error": error})
+            else:
+                member_detail.append({"estimator": r.estimator, "score": r.score})
+            results.append(r)
         calls = tuple(c for r in results for c in r.calls)
-        detail: dict[str, Any] = {
-            "method": self.method,
-            "members": [{"estimator": r.estimator, "score": r.score} for r in results],
-        }
+        detail: dict[str, Any] = {"method": self.method, "members": member_detail}
         if self.weights is not None:
             detail["weights"] = list(self.weights)
         present = [
@@ -593,6 +686,8 @@ class Calibrated:
         self, task: Task, request: Request, completion: Completion, answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
+        if _is_empty(answer):
+            return _empty_result(self.name)
         inner = self.base.estimate(task, request, completion, answer, backend)
         detail: dict[str, Any] = {"base": inner.estimator, "raw_score": inner.score,
                                   "base_detail": dict(inner.detail)}

@@ -84,7 +84,7 @@ def test_normalize_text(text: str, expected: str) -> None:
         ("paris", "Paris", False),
         ("Paris.", "Paris", False),
         ("", "Paris", False),
-        ("", "", True),
+        ("", "", None),  # two missing answers are undecidable
         ("Paris", "", False),
     ],
 )
@@ -214,7 +214,8 @@ NUMERIC_CASES = [
     ("50%", "50 %", True),
     ("50%", "5", False),
     ("0.5", "50%", True),
-    ("123456789012345678901", "123456789012345678900", True),  # rel_tol 1e-6
+    ("123456789012345678901", "123456789012345678900", False),  # integers: exact
+    ("123456789012345678901.0", "123456789012345678900", True),  # rel_tol 1e-6
     ("1e-12", "0", True),  # abs_tol 1e-9
     ("1e-6", "0", False),
     ("\\boxed{17}", "17", True),
@@ -245,8 +246,10 @@ def test_numeric_percent_modes(mode: str, cand: str, target: str, expected: bool
 
 
 def test_numeric_tolerances() -> None:
-    assert Numeric(rel_tol=0.01).compare(TASK, "101", "100").equivalent is True
-    assert Numeric(rel_tol=0.001).compare(TASK, "101", "100").equivalent is False
+    assert Numeric(rel_tol=0.01).compare(TASK, "101.0", "100").equivalent is True
+    assert Numeric(rel_tol=0.001).compare(TASK, "101.0", "100").equivalent is False
+    # two integers compare exactly whatever the tolerances
+    assert Numeric(rel_tol=0.01).compare(TASK, "101", "100").equivalent is False
     assert Numeric(rel_tol=0, abs_tol=0.5).compare(TASK, "3.4", "3").equivalent is True
     assert Numeric(rel_tol=0, abs_tol=0).compare(TASK, "0.1", "1/10").equivalent is True
 
@@ -303,7 +306,9 @@ def test_choice(cand: str, target: str, expected: bool | None) -> None:
         ("New York City", "york city", True),
         ("New York", "York City", False),
         ("anything", "", None),
-        ("", "", True),
+        ("", "", None),
+        ("...", "...", True),
+        ("...", "?", False),
         ("", "x", False),
     ],
 )
@@ -391,6 +396,7 @@ def test_judge_shortcut_and_empty() -> None:
     judge = JudgeComparator(be)
     assert judge.compare(TASK, "paris.", "Paris").equivalent is True
     assert judge.compare(TASK, "", "Paris").equivalent is False
+    assert judge.compare(TASK, "", "").equivalent is None
     assert be.requests == []
     no_shortcut = JudgeComparator(be, shortcut=False)
     assert no_shortcut.compare(TASK, "Paris", "Paris").equivalent is False
@@ -437,7 +443,7 @@ def test_from_spec(spec: object, cls: type) -> None:
 
 def test_from_spec_numeric_options_applied() -> None:
     comp = from_spec({"type": "numeric", "rel_tol": 0.1, "percent": "strict"})
-    assert comp.compare(TASK, "105", "100").equivalent is True
+    assert comp.compare(TASK, "105.0", "100").equivalent is True
     assert comp.compare(TASK, "50%", "0.5").equivalent is False
 
 
@@ -460,3 +466,76 @@ def test_from_spec_numeric_options_applied() -> None:
 def test_from_spec_errors(spec: object, needle: str) -> None:
     with pytest.raises(ConfigError, match=needle):
         from_spec(spec, backends={"j": FakeBackend()})  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- regressions
+
+
+@pytest.mark.parametrize(
+    "comparator",
+    [
+        Exact(),
+        Normalized(),
+        Numeric(),
+        Numeric(fallback_text=False),
+        ChoiceComparator(),
+        Contains(),
+        RegexComparator(),
+        RegexComparator(mode="search"),
+    ],
+)
+@pytest.mark.parametrize(("cand", "target"), [("", ""), ("  ", "\n"), ("", " ")])
+def test_two_empty_answers_are_undecidable(comparator, cand: str, target: str) -> None:
+    j = comparator.compare(TASK, cand, target)
+    assert j.equivalent is None
+    assert j.detail["reason"] == "both empty"
+
+
+def test_judge_two_empty_answers_undecidable_without_call() -> None:
+    be = FakeBackend("VERDICT: EQUIVALENT")
+    for judge in (JudgeComparator(be), JudgeComparator(be, shortcut=False)):
+        assert judge.compare(TASK, "", " ").equivalent is None
+    assert be.requests == []
+
+
+@pytest.mark.parametrize(
+    ("cand", "target", "expected"),
+    [
+        # two integers: exact, whatever the tolerance
+        ("1234567", "1234568", False),
+        ("1000000", "1000001", False),
+        ("1,000,000", "1000001", False),
+        ("2500000", "2500002", False),
+        ("1000000", "1,000,000", True),
+        ("$1000000", "1000000 dollars", True),
+        ("1000000.", "1000001", False),  # trailing sentence period is still an integer
+        # either side decimal / scientific / fraction: tolerances apply
+        ("1e6", "1000000", True),
+        ("1.0e6", "1000001", True),  # rel diff 1e-6
+        ("1000000.0", "1000001", True),
+        ("1000000", "1000001.0", True),
+        ("0.30000000000000004", "0.3", True),
+        ("0.1", "1/10", True),
+        ("0.333333", "1/3", True),
+        ("0.3", "0.31", False),
+        # percentages keep their semantics
+        ("50%", "0.5", True),
+        ("50%", "50", True),
+        ("50%", "51", False),
+        ("100%", "1", True),
+        ("33.3333333%", "1/3", True),
+    ],
+)
+def test_numeric_integers_compare_exactly(cand: str, target: str, expected: bool) -> None:
+    assert Numeric().compare(TASK, cand, target).equivalent is expected
+
+
+def test_parse_number_integer_flag() -> None:
+    def flag(s: str) -> bool:
+        p = parse_number(s)
+        assert p is not None, s
+        return p.integer
+
+    assert flag("42") and flag("1,234,567") and flag("$12") and flag("50%") and flag("-3")
+    assert not flag("42.0") and not flag("1e6") and not flag("3/4") and not flag(".5")
+    assert not flag("1.5 x 10^3")

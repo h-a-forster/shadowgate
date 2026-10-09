@@ -121,6 +121,22 @@ def build(spec, backends=None) -> ConfidenceEstimator:
         ("", None),
         ("unsure", None),
         ("high", None),
+        # regressions: scales and trailing text
+        ("8 out of 10", 0.8),
+        ("8.5 out of 10.", 0.85),
+        ("3 Out Of 4 (decent)", 0.75),
+        ("0,85", 0.85),  # a lone 0,<digits> decimal comma
+        ("1,5", None),
+        ("0,8,5", None),
+        ("1.5", None),  # non-integer in (1, 100]: ambiguous scale
+        ("8.5", None),
+        ("85", 0.85),
+        ("2", 0.02),  # bare integer in (1, 100] stays a percentage
+        ("0.8 or 0.9", None),
+        ("0.8 maybe", None),
+        ("85% but unsure", None),
+        ("8/10 points", None),
+        ("0.7, (fairly sure).", 0.7),
     ],
 )
 def test_parse_value(raw: str, expected: float | None) -> None:
@@ -342,9 +358,9 @@ def test_callable_estimator() -> None:
     assert est.estimate(TASK, REQ, comp(""), "abc", NOBACKEND).score == pytest.approx(0.3)
     assert est.estimate(TASK, REQ, comp(""), "x" * 20, NOBACKEND).score == 1.0
     none = conf.CallableEstimator(lambda *a: None, name="n")
-    assert none.name == "n" and none.estimate(TASK, REQ, comp(""), "", NOBACKEND).score is None
+    assert none.name == "n" and none.estimate(TASK, REQ, comp(""), "4", NOBACKEND).score is None
     nan = conf.CallableEstimator(lambda *a: float("nan"))
-    assert nan.estimate(TASK, REQ, comp(""), "", NOBACKEND).score is None
+    assert nan.estimate(TASK, REQ, comp(""), "4", NOBACKEND).score is None
     with pytest.raises(ConfigError):
         conf.CallableEstimator("not callable")  # type: ignore[arg-type]
 
@@ -358,7 +374,7 @@ def test_callable_estimator() -> None:
 )
 def test_combine_methods(method, weights, expected) -> None:
     est = conf.Combine([Fixed(0.8, "a"), Fixed(0.2, "b")], method=method, weights=weights)
-    r = est.estimate(TASK, REQ, comp(""), "", NOBACKEND)
+    r = est.estimate(TASK, REQ, comp(""), "4", NOBACKEND)
     assert r.score == pytest.approx(expected)
     assert r.detail["members"] == [
         {"estimator": "a", "score": 0.8},
@@ -371,15 +387,15 @@ def test_combine_methods(method, weights, expected) -> None:
 def test_combine_missing() -> None:
     members = [Fixed(0.8, "a"), Fixed(None, "b"), Fixed(0.4, "c")]
     strict = conf.Combine(members)
-    assert strict.estimate(TASK, REQ, comp(""), "", NOBACKEND).score is None
+    assert strict.estimate(TASK, REQ, comp(""), "4", NOBACKEND).score is None
     lenient = conf.Combine(members, ignore_missing=True)
-    assert lenient.estimate(TASK, REQ, comp(""), "", NOBACKEND).score == pytest.approx(0.6)
+    assert lenient.estimate(TASK, REQ, comp(""), "4", NOBACKEND).score == pytest.approx(0.6)
     weighted = conf.Combine(members, method="weighted", weights=[1, 5, 3], ignore_missing=True)
-    assert weighted.estimate(TASK, REQ, comp(""), "", NOBACKEND).score == pytest.approx(
+    assert weighted.estimate(TASK, REQ, comp(""), "4", NOBACKEND).score == pytest.approx(
         (0.8 * 1 + 0.4 * 3) / 4
     )
     all_missing = conf.Combine([Fixed(None)], ignore_missing=True)
-    assert all_missing.estimate(TASK, REQ, comp(""), "", NOBACKEND).score is None
+    assert all_missing.estimate(TASK, REQ, comp(""), "4", NOBACKEND).score is None
 
 
 def test_combine_validation_and_prepare() -> None:
@@ -414,12 +430,12 @@ def test_calibrated_interpolation_and_clamp() -> None:
     pts = [[0.2, 0.1], [0.6, 0.5], [1.0, 0.9]]
     est = conf.Calibrated(Fixed(0.4, "base"), pts)
     assert est.name == "calibrated(base)"
-    r = est.estimate(TASK, REQ, comp(""), "", NOBACKEND)
+    r = est.estimate(TASK, REQ, comp(""), "4", NOBACKEND)
     assert r.score == pytest.approx(0.3)
     assert r.detail["raw_score"] == 0.4 and len(r.calls) == 1
     assert est.apply(0.0) == 0.1 and est.apply(1.5) == 0.9
     assert est.apply(0.6) == pytest.approx(0.5) and est.apply(0.8) == pytest.approx(0.7)
-    none = conf.Calibrated(Fixed(None), pts).estimate(TASK, REQ, comp(""), "", NOBACKEND)
+    none = conf.Calibrated(Fixed(None), pts).estimate(TASK, REQ, comp(""), "4", NOBACKEND)
     assert none.score is None
     assert conf.Calibrated(Fixed(0.3), [[0.5, 0.7]]).apply(0.1) == 0.7
 
@@ -530,3 +546,117 @@ def test_estimators_are_thread_safe() -> None:
         assert m == pytest.approx(i % 10 / 10)
         assert s == pytest.approx((1 + min(i % 4, 3)) / 4)
         assert c == pytest.approx((v + m + s) / 3)
+
+
+# --------------------------------------------------------------------------- regressions
+
+
+def test_empty_answer_gives_none_for_every_estimator_without_calls() -> None:
+    backend = FakeBackend("ANSWER: \nCONFIDENCE: 0.9")
+    mon_backend = FakeBackend("P(correct): 0.9")
+    sc = conf.SelfConsistency(comparator=FakeComparator(), extractor=FakeExtractor(), samples=3)
+    estimators = [
+        conf.Verbal(),
+        conf.Logprob(),
+        sc,
+        conf.Monitor(mon_backend),
+        conf.CallableEstimator(lambda *a: 1.0),
+        conf.Combine([Fixed(1.0, "a"), Fixed(1.0, "b")]),
+        conf.Calibrated(Fixed(1.0), [[0.0, 0.0], [1.0, 1.0]]),
+    ]
+    c = comp("ANSWER: \nCONFIDENCE: 0.9", (0.0, 0.0))
+    for est in estimators:
+        for answer in ("", "   \n"):
+            r = est.estimate(TASK, REQ, c, answer, backend)
+            assert r.score is None, est.name
+            assert r.detail["reason"] == "empty answer"
+            assert r.calls == ()
+    assert backend.requests == [] and mon_backend.requests == []
+
+
+def test_self_consistency_empty_samples_disagree() -> None:
+    # every sample is empty (e.g. refusals): the comparator must not see them as agreeing
+    calls: list[tuple[str, str]] = []
+
+    class Recording(FakeComparator):
+        def compare(self, task, candidate, target):
+            calls.append((candidate, target))
+            return super().compare(task, candidate, target)
+
+    answers = {1: "", 2: "4", 3: "  "}
+    backend = FakeBackend(lambda r: f"ANSWER: {answers[r.n_sample]}")
+    est = conf.SelfConsistency(comparator=Recording(), extractor=FakeExtractor(), samples=3)
+    r = est.estimate(TASK, REQ, comp("ANSWER: 4"), "4", backend)
+    assert r.score == pytest.approx((1 + 1) / (1 + 3))
+    assert r.detail["empty"] == 2 and r.detail["votes"] == [False, True, False]
+    assert calls == [("4", "4")]
+    assert len(r.calls) == 3
+
+
+@pytest.mark.parametrize("concurrency", [1, 3])
+def test_self_consistency_non_backend_error_keeps_other_samples(concurrency: int) -> None:
+    def fn(r: Request) -> str:
+        if r.n_sample == 2:
+            raise RuntimeError("bug in backend")
+        return "ANSWER: 4"
+
+    est = conf.SelfConsistency(
+        comparator=FakeComparator(),
+        extractor=FakeExtractor(),
+        samples=3,
+        concurrency=concurrency,
+    )
+    r = est.estimate(TASK, REQ, comp("ANSWER: 4"), "4", FakeBackend(fn))
+    assert r.score == 1.0
+    assert len(r.calls) == 2
+    assert r.detail["failed"] == 1 and r.detail["successful"] == 2
+    assert r.detail["errors"] == ["RuntimeError: bug in backend"]
+
+
+def test_self_consistency_comparator_error_is_undecided() -> None:
+    class Broken(FakeComparator):
+        def compare(self, task, candidate, target):
+            raise ValueError("bad")
+
+    est = conf.SelfConsistency(comparator=Broken(), extractor=FakeExtractor(), samples=2)
+    r = est.estimate(TASK, REQ, comp("ANSWER: 4"), "4", FakeBackend("ANSWER: 4"))
+    assert r.score == pytest.approx(1 / 3)
+    assert r.detail["undecided"] == 2 and len(r.calls) == 2
+
+
+def test_monitor_non_backend_error_gives_none() -> None:
+    def fail(r: Request) -> str:
+        raise KeyError("oops")
+
+    r = conf.Monitor(FakeBackend(fail)).estimate(TASK, REQ, comp("x"), "4", NOBACKEND)
+    assert r.score is None and r.calls == ()
+    assert r.detail["error"].startswith("KeyError")
+
+
+def test_combine_member_exception_keeps_other_calls() -> None:
+    def bad(task, completion, answer):
+        raise RuntimeError("bug")
+
+    mon = conf.Monitor(FakeBackend("P(correct): 0.9"))
+    est = conf.Combine([mon, conf.CallableEstimator(bad, name="bad")])
+    r = est.estimate(TASK, REQ, comp("ANSWER: 4"), "4", NOBACKEND)
+    assert r.score is None
+    assert len(r.calls) == 1 and r.calls[0].text == "P(correct): 0.9"
+    assert r.detail["members"][1] == {
+        "estimator": "bad",
+        "score": None,
+        "error": "RuntimeError: bug",
+    }
+    lenient = conf.Combine([mon, conf.CallableEstimator(bad)], ignore_missing=True)
+    r2 = lenient.estimate(TASK, REQ, comp("ANSWER: 4"), "4", NOBACKEND)
+    assert r2.score == pytest.approx(0.9) and len(r2.calls) == 1
+
+
+def test_monitor_does_not_substitute_placeholders_inside_values() -> None:
+    backend = FakeBackend("P(correct): 0.5")
+    est = conf.Monitor(backend, prompt="Q: {question}\nA: {answer}\nR: {response}")
+    task = Task(id="t1", prompt="Explain the {answer} and {response} fields")
+    est.estimate(task, REQ, comp("full {question}"), "42", NOBACKEND)
+    assert backend.requests[0].prompt == (
+        "Q: Explain the {answer} and {response} fields\nA: 42\nR: full {question}"
+    )

@@ -3,7 +3,9 @@
 Every comparator implements :class:`shadowgate.types.Comparator` and returns a
 :class:`~shadowgate.types.Judgement`. ``equivalent`` is ``None`` only when the comparator could
 not decide (unparseable judge reply, backend failure, unparseable multiple-choice target, bad
-regex). Shared rule: an empty candidate is never equivalent to a non-empty target.
+regex, both sides empty). Shared rules: an empty candidate is never equivalent to a non-empty
+target (False); a whitespace-only/empty candidate *and* target is undecidable (None), since
+two missing answers do not agree on anything.
 
 Built-in types (see :func:`from_spec`): ``exact``, ``normalized``, ``numeric``, ``choice``,
 ``contains``, ``regex``, ``judge``.
@@ -45,8 +47,12 @@ log = logging.getLogger("shadowgate.compare")
 
 
 def _empty_mismatch(name: str, candidate: str, target: str) -> Judgement | None:
-    if not candidate.strip() and target.strip():
-        return Judgement(equivalent=False, comparator=name, detail={"reason": "empty candidate"})
+    if not candidate.strip():
+        if target.strip():
+            return Judgement(
+                equivalent=False, comparator=name, detail={"reason": "empty candidate"}
+            )
+        return Judgement(equivalent=None, comparator=name, detail={"reason": "both empty"})
     return None
 
 
@@ -119,7 +125,8 @@ class Exact:
 
 class Normalized:
     """Equal after :func:`normalize_text`. If both sides normalise to the empty string (e.g. both
-    are pure punctuation) the stripped raw strings are compared instead."""
+    are pure punctuation) the stripped raw strings are compared instead. Two empty answers are
+    undecidable (None)."""
 
     name = "normalized"
 
@@ -134,8 +141,9 @@ class Normalized:
 
 class Contains:
     """The normalised target appears in the normalised candidate as a whole-word sequence
-    (``"4"`` is not contained in ``"42"``). An empty target is undecidable (None) unless the
-    candidate is empty too."""
+    (``"4"`` is not contained in ``"42"``). A target that normalises to nothing is undecidable
+    (None), unless the candidate normalises to nothing too, in which case the stripped raw
+    strings are compared (as in :class:`Normalized`). Two empty answers are None."""
 
     name = "contains"
 
@@ -146,7 +154,9 @@ class Contains:
         cand, targ = normalize_text(candidate).split(), normalize_text(target).split()
         if not targ:
             if not cand:
-                return Judgement(equivalent=True, comparator=self.name)
+                return Judgement(
+                    equivalent=candidate.strip() == target.strip(), comparator=self.name
+                )
             return Judgement(
                 equivalent=None, comparator=self.name, detail={"reason": "empty target"}
             )
@@ -242,12 +252,15 @@ _LATEX_FRAC_RE = re.compile(r"\\[dt]?frac\s*\{\s*([^{}]+?)\s*\}\s*\{\s*([^{}]+?)
 @dataclass(frozen=True)
 class ParsedNumber:
     """A number read from an answer: exact ``value``, whether it was written as a percentage
-    (``value`` is then the number before ``%``), its currency code and trailing unit text."""
+    (``value`` is then the number before ``%``), its currency code and trailing unit text.
+    ``integer`` is True when it was written as a whole number: digits (optionally with
+    thousands separators) without a decimal point, fraction bar or exponent."""
 
     value: Fraction
     percent: bool = False
     currency: str | None = None
     unit: str = ""
+    integer: bool = False
 
 
 def _canon_unit(unit: str) -> str:
@@ -314,8 +327,19 @@ def parse_number(text: str) -> ParsedNumber | None:
             if currency and currency != word_cur:
                 return None
             currency, unit = word_cur, ""
+    num = m.group("num").rstrip(".")  # "42." is a sentence period, still an integer
+    integer = (
+        "." not in num
+        and m.group("den") is None
+        and m.group("exp") is None
+        and m.group("exp2") is None
+    )
     return ParsedNumber(
-        value=value, percent=m.group("pct") is not None, currency=currency, unit=unit
+        value=value,
+        percent=m.group("pct") is not None,
+        currency=currency,
+        unit=unit,
+        integer=integer,
     )
 
 
@@ -323,8 +347,11 @@ _PERCENT_MODES = ("either", "ratio", "strict")
 
 
 class Numeric:
-    """Numeric equivalence within ``rel_tol`` / ``abs_tol`` (``math.isclose`` semantics; exact
-    rational equality is checked first so large integers compare exactly).
+    """Numeric equivalence. Values are exact rationals and equal values always match. When
+    *both* sides are written as integers (``1000000``, ``1,000,001``, ``50%``) only exact
+    equality counts, so ``1234567`` != ``1234568`` whatever the tolerances. Otherwise (either
+    side is a decimal, fraction or scientific value: ``0.3333333``, ``1/3``, ``1e6``)
+    ``rel_tol`` / ``abs_tol`` apply with ``math.isclose`` semantics.
 
     ``percent`` decides how a percentage compares with a plain number when exactly one side
     has ``%``:
@@ -361,9 +388,11 @@ class Numeric:
         self.fallback_text = bool(fallback_text)
         self.percent = percent
 
-    def _close(self, a: Fraction, b: Fraction) -> bool:
+    def _close(self, a: Fraction, b: Fraction, *, exact: bool = False) -> bool:
         if a == b:
             return True
+        if exact:
+            return False
         try:
             return math.isclose(float(a), float(b), rel_tol=self.rel_tol, abs_tol=self.abs_tol)
         except OverflowError:
@@ -395,17 +424,20 @@ class Numeric:
         if c.unit and t.unit and _canon_unit(c.unit) != _canon_unit(t.unit):
             detail["reason"] = "unit mismatch"
             return Judgement(equivalent=False, comparator=self.name, detail=detail)
+        exact = c.integer and t.integer
+        if exact:
+            detail["exact"] = True
         if c.percent == t.percent:
-            eq = self._close(c.value, t.value)
+            eq = self._close(c.value, t.value, exact=exact)
         else:
             pct, plain = (c, t) if c.percent else (t, c)
-            as_ratio = self._close(pct.value / 100, plain.value)
+            as_ratio = self._close(pct.value / 100, plain.value, exact=exact)
             if self.percent == "strict":
                 eq = False
             elif self.percent == "ratio":
                 eq = as_ratio
             else:
-                eq = as_ratio or self._close(pct.value, plain.value)
+                eq = as_ratio or self._close(pct.value, plain.value, exact=exact)
             detail["percent"] = self.percent
         return Judgement(equivalent=eq, comparator=self.name, detail=detail)
 
