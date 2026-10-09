@@ -254,6 +254,21 @@ def test_resume_skips_existing(ledger: Ledger) -> None:
     assert stats.summary_line().startswith("8/8 done")
 
 
+def test_resume_retries_failed_decisions(ledger: Ledger) -> None:
+    first = run(FakeCascade(fail_ids={"t1", "t3"}), tasks(5), ledger, run_id="r1")
+    assert first.failed == 2
+    assert ledger.done_task_ids("r1") == {"t0", "t2", "t4"}
+    c = FakeCascade()
+    stats = run(c, tasks(5), ledger, run_id="r1", resume=True)
+    assert sorted(c.calls) == ["t1", "t3"]
+    assert stats.skipped_existing == 3 and stats.retried == 2 and stats.completed == 2
+    assert stats.failed == 0
+    assert all(d.error is None for d in ledger.decisions("r1"))
+    assert len(list(ledger.decisions("r1"))) == 5
+    assert "2 retried" in stats.summary_line()
+    assert "retried" not in run(FakeCascade(), tasks(5), ledger, run_id="r1").summary_line()
+
+
 def test_no_resume_reruns_and_upserts(ledger: Ledger) -> None:
     run(FakeCascade(cost=0.01), tasks(4), ledger, run_id="r1")
     c = FakeCascade(cost=0.02)

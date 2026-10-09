@@ -220,3 +220,59 @@ def test_cache_concurrent_threads(tmp_path: Path) -> None:
     assert inner.calls == before
     assert all(r.cached for r in again)
     store.close()
+
+
+class Configured(Counting):
+    """Backend with public config attributes (like the HTTP/CLI backends) plus secrets."""
+
+    def __init__(self, model: str = "m1", base_url: str = "http://a", **kw: object) -> None:
+        super().__init__(name="cfg")
+        self.model = model
+        self.base_url = base_url
+        self.pricing = kw.get("pricing")
+        self.headers = kw.get("headers", {})
+        self.env = kw.get("env")
+        self.api_key_env = kw.get("api_key_env", "KEY")
+
+
+def test_cache_key_includes_backend_config() -> None:
+    store = CacheStore(":memory:")
+    req = Request(prompt="a")
+    assert CachedBackend(Configured(), store).complete(req).cached is False
+    assert CachedBackend(Configured(), store).complete(req).cached is True
+    # Same name, different model / endpoint / pricing: no stale hits.
+    for changed in (
+        Configured(model="m2"),
+        Configured(base_url="http://b"),
+        Configured(pricing=Pricing(1.0, 2.0)),
+    ):
+        assert CachedBackend(changed, store).complete(req).cached is False
+    # Secret-bearing attributes are not part of the fingerprint.
+    same = Configured(headers={"Authorization": "Bearer x"}, env={"T": "y"}, api_key_env="OTHER")
+    assert CachedBackend(same, store).complete(req).cached is True
+
+
+def test_cache_uses_custom_fingerprint_and_cacheable_flag() -> None:
+    store = CacheStore(":memory:")
+
+    class Fp(Counting):
+        fp = "v1"
+
+        def cache_fingerprint(self) -> str:
+            return self.fp
+
+    a = Fp()
+    CachedBackend(a, store).complete(Request(prompt="a"))
+    b = Fp()
+    b.fp = "v2"
+    assert CachedBackend(b, store).complete(Request(prompt="a")).cached is False
+
+    class NoCache(Counting):
+        cacheable = False
+
+    inner = NoCache()
+    cb = CachedBackend(inner, store)
+    n = len(store)
+    cb.complete(Request(prompt="z"))
+    assert cb.complete(Request(prompt="z")).cached is False
+    assert inner.calls == 2 and len(store) == n

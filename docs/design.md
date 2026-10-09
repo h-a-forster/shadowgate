@@ -152,7 +152,7 @@ When `cache` is given the result is wrapped in `CachedBackend`.
 * **FunctionBackend(fn: Callable[[Request], str | Completion], *, name)**.
 * **CachedBackend(inner, store: CacheStore)** and **CacheStore(path)** - SQLite table
   `(key TEXT PRIMARY KEY, backend TEXT, completion_json TEXT, created_at TEXT)`, WAL mode,
-  thread-safe. Key = `request_key(inner.name, request)`. Cache hits return the stored completion
+  thread-safe. Key = sha256 of `request_key(inner.name, request)` plus a backend fingerprint (`cache_fingerprint()` when defined, else class name + model, base_url, pricing and similar non-secret settings), so reconfiguring a backend never serves stale answers. Backends with `cacheable = False` (the simulated backend) bypass the cache. Cache hits return the stored completion
   with `cached=True`. Errors are never cached. `name` passes through unchanged.
 
 ## extract.py

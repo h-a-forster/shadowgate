@@ -86,7 +86,13 @@ class SimulatedBackend:
 
     The task is located by ``request.tags["task_id"]``; otherwise the task whose prompt is
     contained in ``request.prompt`` (longest match wins). An unknown task raises BackendError.
+
+    ``cacheable`` is False: :class:`~shadowgate.backends.cache.CachedBackend` passes requests
+    straight through. The backend is deterministic and free, so caching gains nothing, and the
+    cache key excludes ``tags`` (the task id), so two tasks with identical prompts would collide.
     """
+
+    cacheable = False
 
     def __init__(
         self,
@@ -151,6 +157,15 @@ class SimulatedBackend:
 
     def __repr__(self) -> str:
         return f"SimulatedBackend({self.raw_name!r}, skill={self.skill}, seed={self.seed})"
+
+    def cache_fingerprint(self) -> str:
+        """Every parameter that affects completions (generative params, seed, pricing)."""
+        return repr((
+            "simulated", self.raw_name, self.skill, self.seed, self.overconfidence,
+            self.confidence_noise, self.discrimination, self.systematic_error,
+            repr(self.pricing), self.latency_s, self.latency_per_token_s,
+            self.emit_confidence, self.emit_logprobs,
+        ))
 
     # ------------------------------------------------------------------ draws
 

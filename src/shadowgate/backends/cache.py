@@ -2,16 +2,47 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ..types import Backend, Completion, Request
 from .base import request_key
 
-__all__ = ["CacheStore", "CachedBackend"]
+__all__ = ["CacheStore", "CachedBackend", "backend_fingerprint"]
+
+# Public, non-secret configuration that changes what a backend returns or what it costs.
+# Deliberately excludes api keys, ``api_key_env``, ``headers`` and ``env`` (may hold secrets).
+_FINGERPRINT_ATTRS = (
+    "model", "base_url", "pricing", "executable", "extra_args", "isolation_args",
+    "default_system", "command", "cwd", "path", "key_backend",
+)
+
+
+def _stable(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_stable(v) for v in value]
+    return repr(value)
+
+
+def backend_fingerprint(backend: Any) -> str:
+    """Identify a backend's configuration for cache keying.
+
+    Uses ``backend.cache_fingerprint()`` when defined; otherwise the class name plus the
+    public, non-secret attributes in ``_FINGERPRINT_ATTRS`` that the backend has.
+    """
+    custom = getattr(backend, "cache_fingerprint", None)
+    if callable(custom):
+        return f"{type(backend).__qualname__}:{custom()}"
+    attrs = {a: _stable(getattr(backend, a)) for a in _FINGERPRINT_ATTRS if hasattr(backend, a)}
+    blob = json.dumps(attrs, sort_keys=True, ensure_ascii=False, default=repr)
+    return f"{type(backend).__qualname__}:{blob}"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS completions (
@@ -83,20 +114,32 @@ class CacheStore:
 
 
 class CachedBackend:
-    """Wrap a backend with a response cache keyed by ``request_key(inner.name, request)``.
+    """Wrap a backend with a response cache.
 
-    Hits return the stored completion with ``cached=True`` (cost and latency are the original
-    call's). Exceptions propagate and completions with ``stop_reason == "error"`` are not
-    stored. ``name`` is the inner backend's name, so ledgers and keys are unaffected.
+    The key combines ``request_key(inner.name, request)`` with :func:`backend_fingerprint`, so
+    changing a backend's model, endpoint, pricing or (for simulated backends) generative
+    parameters never serves stale completions or costs. Backends whose ``cacheable`` attribute
+    is False (e.g. ``SimulatedBackend``) bypass the cache entirely. Hits return the stored
+    completion with ``cached=True`` (cost and latency are the original call's). Exceptions
+    propagate and completions with ``stop_reason == "error"`` are not stored. ``name`` is the
+    inner backend's name, so ledgers are unaffected.
     """
 
     def __init__(self, inner: Backend, store: CacheStore) -> None:
         self.inner = inner
         self.store = store
         self.name = inner.name
+        self.enabled = bool(getattr(inner, "cacheable", True))
+        self._fingerprint = backend_fingerprint(inner) if self.enabled else ""
+
+    def key(self, request: Request) -> str:
+        base = request_key(self.inner.name, request)
+        return hashlib.sha256(f"{base}|{self._fingerprint}".encode()).hexdigest()
 
     def complete(self, request: Request) -> Completion:
-        key = request_key(self.inner.name, request)
+        if not self.enabled:
+            return self.inner.complete(request)
+        key = self.key(request)
         hit = self.store.get(key)
         if hit is not None:
             return hit

@@ -73,7 +73,7 @@ _KEYS: dict[str, frozenset[str]] = {
     ),
     "claude-code": frozenset(
         {"model", "name", "executable", "timeout_s", "max_attempts", "extra_args",
-         "default_system"}
+         "default_system", "pricing"}
     ),
     "command": frozenset(
         {"command", "name", "timeout_s", "max_attempts", "pricing", "retryable_exit_codes", "cwd"}

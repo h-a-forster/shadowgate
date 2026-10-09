@@ -95,6 +95,9 @@ def test_other_provider_specs(fakes: dict[str, type]) -> None:
     assert o.kwargs == {"base_url": "http://localhost:11434/v1", "headers": {"X-A": "1"}}
     c = make_backend({"type": "claude-code", "model": "haiku", "extra_args": ["--x"]})
     assert isinstance(c, fakes["ClaudeCodeBackend"]) and c.kwargs == {"extra_args": ("--x",)}
+    cp = make_backend({"type": "claude-code", "model": "haiku",
+                       "pricing": {"input": 1.0, "output": 5.0}})
+    assert cp.kwargs == {"pricing": Pricing(input_per_mtok=1.0, output_per_mtok=5.0)}
     m = make_backend({"type": "command", "command": ["python", "s.py"],
                       "retryable_exit_codes": [75]})
     assert isinstance(m, fakes["CommandBackend"])
@@ -166,7 +169,9 @@ def test_cache_wrapping(tmp_path: Path) -> None:
     assert isinstance(b, CachedBackend) and b.name == "sim:s"
     req = Request(prompt="What is 2+3?")
     assert b.complete(req).cached is False
-    assert b.complete(req).cached is True
+    # Simulated backends are not cacheable (deterministic; tags are not in the key): bypass.
+    assert b.complete(req).cached is False
+    assert len(store) == 0
     store.close()
 
 

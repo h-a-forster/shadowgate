@@ -65,7 +65,8 @@ class RunStats:
 
     ``total`` is the number of input items considered (tasks, or pending audits).
     ``submitted`` were handed to a worker; ``completed`` were recorded (including failed ones);
-    ``skipped_existing`` were already in the ledger (resume). ``cost_serving`` and
+    ``skipped_existing`` were already in the ledger (resume); ``retried`` were recorded with
+    ``error`` set by an earlier invocation and routed again on resume. ``cost_serving`` and
     ``cost_audit`` sum the known costs of the decisions recorded by this invocation (for
     :func:`run_pending_audits`, ``cost_audit`` is the audit cost added by this invocation).
     ``unknown_cost`` counts recorded decisions with at least one unknown cost. ``stopped`` is
@@ -76,6 +77,7 @@ class RunStats:
     submitted: int = 0
     completed: int = 0
     skipped_existing: int = 0
+    retried: int = 0
     failed: int = 0
     cost_serving: float = 0.0
     cost_audit: float = 0.0
@@ -99,6 +101,8 @@ class RunStats:
         parts = [f"{done}/{self.total} done"]
         if self.skipped_existing:
             parts.append(f"{self.skipped_existing} resumed")
+        if self.retried:
+            parts.append(f"{self.retried} retried")
         parts.append(f"{self.escalated} escalated")
         parts.append(f"{self.audited} audited")
         if self.failed:
@@ -289,10 +293,11 @@ def run(
     Duplicate task ids raise :class:`DatasetError` before anything is written. The run is
     registered with ``ledger.start_run(run_id, config=config_snapshot or {}, mode=mode)``.
     With ``resume=True`` tasks already recorded for ``run_id`` are skipped (counted in
-    ``skipped_existing``); with ``resume=False`` every task is routed again and its record is
-    replaced (upsert). An unexpected exception from ``cascade.route`` is recorded as a Decision
-    with ``error`` set, empty ``final_tier``/``answer``/``attempts`` and unknown costs. See the
-    module docstring for budget, failure and interrupt semantics.
+    ``skipped_existing``), except failed records (``error`` set), which are routed again and
+    replaced (counted in ``retried``); with ``resume=False`` every task is routed again and its
+    record is replaced (upsert). An unexpected exception from ``cascade.route`` is recorded as a
+    Decision with ``error`` set, empty ``final_tier``/``answer``/``attempts`` and unknown costs.
+    See the module docstring for budget, failure and interrupt semantics.
     """
     _check_args(workers, max_consecutive_failures)
     t0 = time.perf_counter()
@@ -312,8 +317,10 @@ def run(
 
     if resume:
         done_ids = ledger.done_task_ids(run_id)
+        failed_ids = ledger.done_task_ids(run_id, include_errors=True) - done_ids
         todo = [t for t in task_list if t.id not in done_ids]
         stats.skipped_existing = len(task_list) - len(todo)
+        stats.retried = sum(1 for t in todo if t.id in failed_ids)
     else:
         todo = task_list
 

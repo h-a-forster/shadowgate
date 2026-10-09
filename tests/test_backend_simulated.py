@@ -251,3 +251,35 @@ def test_invalid_config() -> None:
         SimulatedBackend.from_tasks([Task("a", "p", meta={"difficulty": "hard"})], name="m")
     with pytest.raises(ConfigError):
         SimulatedBackend.from_tasks([], name="")
+
+
+def test_cache_fingerprint_covers_all_params() -> None:
+    tasks = [Task("a", "p", "1")]
+    base = SimulatedBackend("m", skill=1.0, tasks=tasks).cache_fingerprint()
+    for kw in ({"skill": 2.0}, {"seed": 1}, {"overconfidence": 0.1}, {"confidence_noise": 0.2},
+               {"discrimination": 0.3}, {"systematic_error": 0.5},
+               {"pricing": Pricing(100.0, 500.0)}, {"latency_s": 1.0},
+               {"latency_per_token_s": 0.5}, {"emit_confidence": False},
+               {"emit_logprobs": False}):
+        merged = {"skill": 1.0, **kw}
+        assert SimulatedBackend("m", tasks=tasks, **merged).cache_fingerprint() != base, kw
+    assert SimulatedBackend("m", skill=1.0, tasks=tasks).cache_fingerprint() == base
+
+
+def test_cached_simulated_bypasses_cache_identical_prompts() -> None:
+    from shadowgate.backends.cache import CachedBackend, CacheStore
+
+    tk = [Task("a", "What is the capital?", "Paris"), Task("b", "What is the capital?", "Rome")]
+    store = CacheStore(":memory:")
+    cb = CachedBackend(SimulatedBackend("m", skill=20, tasks=tk), store)
+    for t in tk:
+        out = cb.complete(Request(prompt=t.prompt, tags={"task_id": t.id}))
+        assert out.text.endswith(f"ANSWER: {t.reference}") and out.cached is False
+    assert len(store) == 0
+    # Re-configured backend sharing the store answers with its own parameters and pricing.
+    cheap = CachedBackend(SimulatedBackend("m", skill=20, tasks=tk), store)
+    dear = CachedBackend(
+        SimulatedBackend("m", skill=20, tasks=tk, pricing=Pricing(100.0, 500.0)), store
+    )
+    req = Request(prompt=tk[0].prompt, tags={"task_id": "a"})
+    assert dear.complete(req).cost_usd > cheap.complete(req).cost_usd

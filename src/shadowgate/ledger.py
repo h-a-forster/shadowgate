@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     escalated     INTEGER NOT NULL,
     cost_usd      REAL,
     audit_status  TEXT,
+    error         TEXT,
     decision_json TEXT NOT NULL,
     PRIMARY KEY (run_id, task_id)
 );
@@ -156,7 +157,9 @@ def _finite_or_none(x: float | None) -> float | None:
 class Ledger:
     """Thread-safe SQLite store of routing decisions, keyed by ``(run_id, task_id)``."""
 
-    SCHEMA_VERSION = 1
+    #: Version history: 1 = initial; 2 = ``decisions.error`` column (migrated in place from 1,
+    #: backfilled from ``decision_json``).
+    SCHEMA_VERSION = 2
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path) if str(path) != ":memory:" else Path(":memory:")
@@ -196,6 +199,7 @@ class Ledger:
             raise LedgerError(f"{self.path} is not a shadowgate ledger (not SQLite): {exc}") \
                 from exc
 
+        stored_version: int | None = None
         if tables:
             version = None
             if "meta" in tables:
@@ -217,6 +221,7 @@ class Ledger:
                     f"{self.path} uses ledger schema version {v}, newer than this shadowgate "
                     f"supports ({self.SCHEMA_VERSION}); upgrade shadowgate to read it"
                 )
+            stored_version = v
 
         try:
             mode = conn.execute("PRAGMA journal_mode = WAL").fetchone()
@@ -227,8 +232,10 @@ class Ledger:
             for stmt in _SCHEMA.split(";"):
                 if stmt.strip():
                     conn.execute(stmt)
+            if stored_version is not None and stored_version < self.SCHEMA_VERSION:
+                self._migrate(stored_version)
             conn.execute(
-                "INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
                 (_META_VERSION_KEY, str(self.SCHEMA_VERSION)),
             )
             conn.execute("COMMIT")
@@ -236,6 +243,25 @@ class Ledger:
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
             raise LedgerError(f"cannot initialise ledger {self.path}: {exc}") from exc
+
+    def _migrate(self, from_version: int) -> None:
+        """Upgrade an older schema in place. Caller holds the write transaction."""
+        conn = self._conn
+        if from_version < 2:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(decisions)")}
+            if "error" not in cols:
+                conn.execute("ALTER TABLE decisions ADD COLUMN error TEXT")
+            rows = conn.execute("SELECT rowid, decision_json FROM decisions").fetchall()
+            for rowid, raw in rows:
+                try:
+                    err = json.loads(raw).get("error")
+                except (ValueError, AttributeError):
+                    continue  # corrupt rows surface on read, not during migration
+                if err is not None:
+                    conn.execute(
+                        "UPDATE decisions SET error = ? WHERE rowid = ?", (str(err), rowid)
+                    )
+            log.info("ledger %s: migrated schema %d -> 2", self.path, from_version)
 
     # ------------------------------------------------------------------ plumbing
 
@@ -270,11 +296,13 @@ class Ledger:
         shadow_status = d.shadow.status if d.shadow is not None else None
         self._conn.execute(
             "INSERT INTO decisions (run_id, task_id, created_at, mode, final_tier, escalated, "
-            "cost_usd, audit_status, decision_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "cost_usd, audit_status, error, decision_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (run_id, task_id) DO UPDATE SET created_at = excluded.created_at, "
             "mode = excluded.mode, final_tier = excluded.final_tier, "
             "escalated = excluded.escalated, cost_usd = excluded.cost_usd, "
-            "audit_status = excluded.audit_status, decision_json = excluded.decision_json",
+            "audit_status = excluded.audit_status, error = excluded.error, "
+            "decision_json = excluded.decision_json",
             (
                 d.run_id,
                 d.task.id,
@@ -284,6 +312,7 @@ class Ledger:
                 int(bool(d.escalated)),
                 _finite_or_none(d.cost_usd),
                 shadow_status,
+                d.error,
                 _dumps(d.to_dict()),
             ),
         )
@@ -395,10 +424,12 @@ class Ledger:
             )
         )
 
-    def done_task_ids(self, run_id: str) -> set[str]:
-        return {r[0] for r in self._query(
-            "SELECT task_id FROM decisions WHERE run_id = ?", (run_id,)
-        )}
+    def done_task_ids(self, run_id: str, *, include_errors: bool = False) -> set[str]:
+        """Task ids recorded for ``run_id``; failed decisions (``error`` set) only on request."""
+        sql = "SELECT task_id FROM decisions WHERE run_id = ?"
+        if not include_errors:
+            sql += " AND error IS NULL"
+        return {r[0] for r in self._query(sql, (run_id,))}
 
     def decisions(self, run_id: str | None = None) -> Iterator[Decision]:
         """Decisions of ``run_id`` (default: the latest run) in insertion order."""

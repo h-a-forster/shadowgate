@@ -369,3 +369,62 @@ def test_threaded_readers_and_writer_on_separate_connections(tmp_path: Path) -> 
         reader.close()
         writer.close()
     assert not errors
+
+
+# --------------------------------------------------------------------------- errors & migration
+
+
+def test_done_task_ids_excludes_errors_by_default(ledger: Ledger) -> None:
+    ledger.record(make_decision(task_id="ok"))
+    ledger.record(dataclasses.replace(make_decision(task_id="bad"), error="BackendError: 401"))
+    assert ledger.done_task_ids("r1") == {"ok"}
+    assert ledger.done_task_ids("r1", include_errors=True) == {"ok", "bad"}
+    # A successful re-route replaces the failed record and clears the error.
+    ledger.record(make_decision(task_id="bad"))
+    assert ledger.done_task_ids("r1") == {"ok", "bad"}
+
+
+_V1_DDL = """
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE runs (run_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, mode TEXT NOT NULL,
+    config_json TEXT NOT NULL DEFAULT '{}', note TEXT NOT NULL DEFAULT '');
+CREATE TABLE decisions (run_id TEXT NOT NULL, task_id TEXT NOT NULL, created_at TEXT NOT NULL,
+    mode TEXT NOT NULL, final_tier TEXT NOT NULL, escalated INTEGER NOT NULL, cost_usd REAL,
+    audit_status TEXT, decision_json TEXT NOT NULL, PRIMARY KEY (run_id, task_id));
+CREATE INDEX idx_decisions_audit ON decisions (run_id, audit_status);
+CREATE INDEX idx_runs_created ON runs (created_at);
+"""
+
+
+def test_migrates_v1_ledger_in_place(tmp_path: Path) -> None:
+    path = tmp_path / "v1.sqlite"
+    ok = make_decision(task_id="ok")
+    bad = dataclasses.replace(make_decision(task_id="bad"), error="BackendError: 401")
+    conn = sqlite3.connect(path)
+    conn.executescript(_V1_DDL)
+    conn.execute("INSERT INTO meta VALUES ('shadowgate_schema_version', '1')")
+    conn.execute("INSERT INTO runs VALUES ('r1', '2026-01-01', 'serve', '{}', '')")
+    for d in (ok, bad):
+        conn.execute(
+            "INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("r1", d.task.id, d.created_at, "serve", d.final_tier, 1, None, "done",
+             json.dumps(d.to_dict())),
+        )
+    conn.commit()
+    conn.close()
+
+    with Ledger(path) as lg:
+        assert lg.done_task_ids("r1") == {"ok"}
+        assert lg.done_task_ids("r1", include_errors=True) == {"ok", "bad"}
+        assert [d.task.id for d in lg.decisions("r1")] == ["ok", "bad"]
+        lg.record(make_decision(task_id="bad"))  # upsert writes the new column
+        assert lg.done_task_ids("r1") == {"ok", "bad"}
+    conn = sqlite3.connect(path)
+    version = conn.execute(
+        "SELECT value FROM meta WHERE key = 'shadowgate_schema_version'"
+    ).fetchone()[0]
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(decisions)")]
+    conn.close()
+    assert version == str(Ledger.SCHEMA_VERSION) == "2"
+    assert "error" in cols
+    Ledger(path).close()  # reopening a migrated file is a no-op
