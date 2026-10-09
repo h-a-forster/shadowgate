@@ -47,9 +47,9 @@ with code 2 and one line naming the offending path.
 | `ledger` | path | `.shadowgate/ledger.sqlite` | SQLite ledger for decisions. `--ledger` overrides. |
 | `seed` | integer | `0` | Default for `[audit].seed` and for every `simulated` backend's `seed`. |
 
-`audit`, `sweep`, `report`, `runs` and `export` do not read the config, so they use
-`.shadowgate/ledger.sqlite` unless you pass `--ledger`. If you set `run.ledger`, pass the same
-path to those commands.
+Only `run` and `audit --run-pending` read the config. `audit`, `sweep`, `calibrate`, `report`,
+`runs`, `export` and `import` use `.shadowgate/ledger.sqlite` unless you pass `--ledger`. If you
+set `run.ledger`, pass the same path to those commands.
 
 ## `[backends]`
 
@@ -140,7 +140,7 @@ A deterministic offline model for demos, tests and threshold experiments. It nee
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `skill` | number | required | Higher is stronger. The built-in arithmetic generator produces difficulties of roughly 2 to 16. |
+| `skill` | number | required | Higher is stronger. The built-in arithmetic generator produces difficulties of about 2 to 17 at its default 1-6 steps, and up to about 31 at 12 steps. |
 | `seed` | integer | `run.seed` | Seed for all draws. |
 | `overconfidence` | number | `0.0` | Added to the stated confidence on average. |
 | `confidence_noise` | number >= 0 | `0.1` | Standard deviation of Gaussian noise on the stated confidence. |
@@ -151,7 +151,7 @@ A deterministic offline model for demos, tests and threshold experiments. It nee
 | `latency_per_token_s` | number | `0.01` | Reported latency per output token. |
 | `emit_confidence` | boolean | `true` | Emit a `CONFIDENCE:` line when the prompt asks for one. |
 | `emit_logprobs` | boolean | `true` | Emit token logprobs when requested. |
-| `model`, `name` | string | backend id | Backend name is `sim:<name>`. |
+| `model`, `name` | string | backend id | Backend name is `sim:<name>`, else `sim:<model>`, else `sim:<id>`. |
 
 ### `type = "replay"`
 
@@ -222,7 +222,7 @@ tier escalates to the next tier.
 | `self_consistency` | `samples` (`5`), `temperature` (provider default), `concurrency` (`1`) | Draws `samples` extra completions from the same backend. Score = `(1 + agreeing samples) / (1 + successful samples)`, using the `[answer]` comparator. |
 | `monitor` | `backend` (required), `prompt`, `system`, `max_tokens` (`1024`), `temperature`, `effort`, `allow_words` (`false`) | A second model reads the question and proposed answer and replies `P(correct): <number>`. A custom `prompt` may use `{question}`, `{answer}` and `{response}` and must contain `{answer}` or `{response}`. |
 | `combine` | `members` (required, array of estimator tables), `method` (`"mean"`; or `"min"`, `"max"`, `"weighted"`), `weights` (required for `weighted`), `ignore_missing` (`false`) | Any missing member score makes the combined score missing unless `ignore_missing = true`. |
-| `calibrated` | `base` (required, estimator table), `points` (required, array of `[x, y]` in [0, 1]) | Applies a monotone piecewise-linear map to another estimator's score. `shadowgate.sweep.fit_isotonic` produces the points from eval-mode data. |
+| `calibrated` | `base` (required, estimator table), `points` (required, array of `[x, y]` in [0, 1]) | Applies a monotone piecewise-linear map to another estimator's score. [`shadowgate calibrate`](cli.md#calibrate) fits the points from an eval-mode run and prints this line. |
 
 The `callable` estimator wraps a Python function and is available only through the
 [Python API](guide.md#python-api).
@@ -281,7 +281,7 @@ audits run inline at the defaults below.
 | `floor` | number in (0, 1] | `0.01` | Minimum inclusion probability. Must be positive so every accepted case can be audited and the weighted estimate stays unbiased. |
 | `tier` | string | the last tier | Audit (reference) tier. Only the last tier's name is accepted. |
 | `seed` | integer | `run.seed` | Seed for the reproducible, sha256-based selection of audited cases. |
-| `tolerance` | number in (0, 1) | unset | Acceptable skipped-case error or disagreement rate. Sets the audit status and the default for `audit`, `report` and `--fail-on-breach`. |
+| `tolerance` | number in (0, 1) | unset | Acceptable skipped-case error or disagreement rate. Sets the audit status and the default for `audit`, `report` and `--fail-on-breach`. Stored with the run, so it survives `export` and `import`. |
 | `judge` | table or string | `[answer].comparator` | Comparator for served answer vs audit answer. Use a `judge` comparator for free-text answers. |
 
 The inclusion probability for a case with confidence `c` is `max(floor, stratum_rate(c) or rate)`.

@@ -28,7 +28,7 @@ import math
 import re
 import sqlite3
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -493,8 +493,8 @@ class Ledger:
 
         Run metadata lines (``{"shadowgate_run": ...}``) create the run with its config, or fill
         in the config of an existing run that has none. Files without them still import; the
-        runs then have an empty config. The whole file is validated before anything is written,
-        then written in one transaction.
+        runs then have an empty config. The whole file is parsed, and run modes are checked against
+        the ledger, before anything is written.
         """
         items: list[Decision] = []
         headers: list[dict[str, Any]] = []
@@ -519,10 +519,29 @@ class Ledger:
                     raise LedgerError(
                         f"{path}:{lineno}: invalid decision record: {exc}"
                     ) from exc
+        self._check_run_headers(headers, path)
         for h in headers:
             self._import_run_header(h)
         self._write_decisions(items)
         return len(items)
+
+    def _check_run_headers(self, headers: Sequence[Mapping[str, Any]], path: str | Path) -> None:
+        """Reject mode conflicts (within the file or with the ledger) before anything is written."""
+        modes: dict[str, str] = {}
+        for h in headers:
+            if modes.setdefault(h["run_id"], h["mode"]) != h["mode"]:
+                raise LedgerError(f"{path}: run {h['run_id']!r} has headers with different modes")
+        with self._lock:
+            self._check_open()
+            for run_id, mode in modes.items():
+                row = self._conn.execute(
+                    "SELECT mode FROM runs WHERE run_id = ?", (run_id,)
+                ).fetchone()
+                if row is not None and row[0] != mode:
+                    raise LedgerError(
+                        f"run {run_id!r} already exists with mode {row[0]!r}; the import "
+                        f"has mode {mode!r}"
+                    )
 
     def _import_run_header(self, h: Mapping[str, Any]) -> None:
         config_json = _dumps(redact_config(dict(h.get("config") or {})))

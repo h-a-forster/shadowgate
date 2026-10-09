@@ -739,7 +739,8 @@ def _emit_audit(args: argparse.Namespace, summary: AuditSummary) -> int:
         _out(_report_module().render_text(summary).rstrip("\n"))
     if args.fail_on_breach and summary.status == "breach":
         _err(
-            f"shadowgate: audit breach: skipped-case {summary.status_metric or 'error'} "
+            f"shadowgate: audit breach: skipped-case "
+            f"{(summary.status_metric or 'error').removeprefix('skipped_')} "
             f"exceeds tolerance {_pct(summary.tolerance)}"
         )
         return EXIT_BREACH
@@ -1337,8 +1338,8 @@ def build_parser() -> argparse.ArgumentParser:
             "--ledger", metavar="PATH", default=None, help=f"ledger file (default: {default})"
         )
 
-    def level_opt(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--level", type=_level, default=0.95, metavar="L", help=_LEVEL_HELP)
+    def level_opt(p: argparse.ArgumentParser, help: str = _LEVEL_HELP) -> None:
+        p.add_argument("--level", type=_level, default=0.95, metavar="L", help=help)
 
     def run_id_opt(p: argparse.ArgumentParser, what: str = "the latest run") -> None:
         p.add_argument("--run-id", metavar="ID", default=None, help=f"run to use (default: {what})")
@@ -1449,7 +1450,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--budget", type=float, default=None, metavar="X", help="USD per task")
     p.add_argument("--holdout", type=float, default=0.3, metavar="F", help="held-out share (0.3)")
     p.add_argument("--seed", type=int, default=0, metavar="S", help="split seed (0)")
-    level_opt(p)
+    level_opt(p, "confidence level of the intervals (0.95)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
 
     # calibrate

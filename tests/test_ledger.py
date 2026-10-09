@@ -454,6 +454,17 @@ def test_import_header_mode_conflict(tmp_path: Path) -> None:
             b.import_jsonl(out)
 
 
+def test_import_header_conflict_writes_nothing(tmp_path: Path) -> None:
+    out = tmp_path / "h.jsonl"
+    headers = [{"shadowgate_run": {"run_id": rid, "mode": "eval"}} for rid in ("new", "r1")]
+    out.write_text("\n".join(json.dumps(h) for h in headers), encoding="utf-8")
+    with Ledger(tmp_path / "dst.sqlite") as b:
+        b.start_run("r1", config={}, mode="serve")
+        with pytest.raises(LedgerError, match="mode"):
+            b.import_jsonl(out)
+        assert [r.run_id for r in b.runs()] == ["r1"]
+
+
 def test_import_rejects_bad_header(tmp_path: Path) -> None:
     out = tmp_path / "h.jsonl"
     out.write_text(json.dumps({"shadowgate_run": {"mode": "eval"}}), encoding="utf-8")

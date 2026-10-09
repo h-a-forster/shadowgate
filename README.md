@@ -1,6 +1,6 @@
 # shadowgate
 
-Confidence-gated LLM model cascades that measure how often the cheap tier is wrong on the cases
+Confidence-gated LLM cascades that measure how often the cheap tier is wrong on the cases
 it keeps.
 
 ## Why
@@ -24,32 +24,44 @@ uv add "shadowgate[anthropic]"        # as a project dependency, with uv
 
 ## Quickstart
 
-Offline demo with two simulated models (400 tasks, no network, no keys; output trimmed):
+Offline demo with two simulated models (400 tasks, no network, no keys; progress lines and
+next-step hints trimmed):
 
 ```sh
 shadowgate demo --out shadowgate-demo
 ```
 
 ```text
-Serve mode: confidence threshold 0.80, stratified shadow audits
-  escalation rate         52.8% [47.9%, 57.6%]
-  kept by fast tier       189 decisions, 51 shadow-audited by 'slow'
-  disagreement on kept    0.0% [0.0%, 7.4%] (weighted by 1/pi)
-  error on kept           2.1% [0.8%, 5.3%] (vs references)
-  served accuracy         96.0% [93.6%, 97.5%]
-  cost per task           $0.000529
-  est. savings vs slow    36.2% [34.4%, 37.9%]
-  audit status            inconclusive (tolerance 5.0%; ~31 more audits to resolve)
+shadowgate demo: 400 simulated arithmetic tasks (seed 0); fast tier skill 8.5 (overconfident), slow tier skill 24
+  eval  run demo-n400-s0-eval: 400/400 done | 140 escalated | 0 audited | $0.1517 serving + $0.1946 audit | 0.7s
+  serve run demo-n400-s0-serve: 400/400 done | 140 escalated | 89 audited | $0.1517 serving + $0.0677 audit | 0.6s
+
+Serve mode: confidence threshold 0.55, stratified shadow audits
+  escalation rate         35.0% [30.5%, 39.8%]
+  kept by fast tier       260 decisions, 89 shadow-audited by 'slow'
+  disagreement on kept    10.8% [5.1%, 19.4%] (weighted by 1/pi)
+  error on kept           12.3% [8.9%, 16.9%] (vs references)
+  served accuracy         92.0% [88.9%, 94.3%]
+  cost per task           $0.000379
+  est. savings vs slow    54.8% [53.6%, 55.9%]
+  audit status            breach (tolerance 5.0%)
 
 Eval mode: every tier on every task, threshold sweep
-  only:fast               accuracy 54.2% [49.4%, 59.1%]       cost/task $0.000027
-  only:slow               accuracy 97.0% [94.8%, 98.3%]       cost/task $0.000839
-  oracle                  accuracy 97.0% [94.8%, 98.3%]       cost/task $0.000455
-  recommended threshold   0.74 -> accuracy 94.2% [88.4%, 97.1%], cost/task $0.000565 (held-out n=120)
+  only:fast               accuracy 57.0% [52.1%, 61.8%]       cost/task $0.000027
+  only:slow               accuracy 100.0% [99.0%, 100.0%]     cost/task $0.000839
+  oracle                  accuracy 100.0% [99.0%, 100.0%]     cost/task $0.000433
+  recommended threshold   0.89 -> accuracy 99.2% [95.4%, 99.9%], cost/task $0.000487 (held-out n=120)
+  cost vs slow-only       -41.9%
+
+The fast tier reports 95% mean confidence on the answers it keeps; the audit estimates 11% of them disagree with the slow tier (95% CI 5-19%), more than the 5% its confidence implies.
 ```
 
-It writes `shadowgate-demo/report.html`. Disagreement is 0% while error is 2.1%: the strong tier
-sometimes makes the same mistake, so disagreement alone understates error.
+The demo config sets the threshold too low on purpose. The fast tier keeps 65% of tasks and is
+overconfident on them: the audit puts disagreement on kept answers at 10.8%, and grading against
+references puts the error at 12.3%. The lower bound of the error interval (8.9%) is above the 5%
+tolerance, so the status is `breach`. The eval-mode sweep recommends 0.89 instead. The demo writes
+`shadowgate-demo/report.html` and prints the `audit`, `sweep` and `calibrate` commands to explore
+the two runs.
 
 A real two-tier config (excerpt of [`examples/anthropic.toml`](examples/anthropic.toml)):
 
@@ -99,8 +111,10 @@ shadowgate audit --run-id prod --fail-on-breach
 shadowgate report --run-id prod --sweep-run-id calib -o report.html
 ```
 
-`shadowgate init` writes an offline starter config and 20 tasks to try the same commands without
-a key.
+`shadowgate init` writes an offline starter config and 20 tasks, so you can try the same
+commands without a key. `shadowgate calibrate` fits a monotone map for a tier's confidence from an
+eval-mode run and prints the config line. `shadowgate export` and `shadowgate import` move a run
+between ledgers as JSONL, including its config and tolerance.
 
 ## How it works
 
@@ -129,14 +143,31 @@ task -> cheap tier -> confidence >= threshold? --yes--> serve, record pi
 - Every decision goes to a SQLite ledger as it finishes. Runs resume, respect a spending cap and
   can use a response cache.
 - `audit --fail-on-breach` exits 3 when the lower bound of the interval exceeds the tolerance.
+  `--level` sets the interval's confidence level (default 0.95).
 
 Backends: Anthropic (official SDK), OpenAI-compatible HTTP (OpenAI, Ollama, vLLM, OpenRouter),
-the Claude Code CLI, any shell command, a deterministic simulator, and replay of recorded
+the Claude Code CLI, any local command, a deterministic simulator, and replay of recorded
 completions.
 
 ## Results
 
-<!-- RESULTS -->
+One real run: Claude Haiku 5.5 as the fast tier, Claude Opus 5.5 as the final tier, verbal
+confidence, 200 generated multi-step arithmetic problems with reference answers.
+
+| Policy | Accuracy (95% CI) | Cost per task |
+|---|---|---|
+| Haiku only | 95.0% (91.0-97.3) | $0.00047 |
+| Opus only | 100.0% (98.1-100.0) | $0.0115 |
+| Cascade, threshold 0.80 | 98.5% (95.7-99.5) | $0.0016 |
+| Oracle router (lower bound) | 100.0% | $0.0010 |
+
+Haiku kept 181 of 200 answers. Their error against references was 1.7% (95% CI 0.6-4.8%), so the
+upper bound of 4.8% passes a 5% tolerance, narrowly. The errors sit near the threshold: in the
+[0.80, 0.90) confidence bin, Opus disagreed with 13.3% of the audited answers (95% CI 1.7-40.5%),
+against 0% above 0.90.
+
+Setup, per-bin tables and caveats: [docs/results.md](docs/results.md). Full report:
+[docs/results/arithmetic-haiku-opus.html](docs/results/arithmetic-haiku-opus.html).
 
 ## Python API
 
@@ -183,6 +214,7 @@ An offline version with simulated models is in [`examples/python_api.py`](exampl
 - [Configuration](docs/configuration.md): every TOML key.
 - [CLI](docs/cli.md): every command, option and exit code.
 - [Examples](examples/README.md): configs for each backend.
+- [Results](docs/results.md): the Haiku 5.5 -> Opus 5.5 experiment and how to reproduce it.
 - [Design](docs/design.md): architecture and module contracts.
 
 ## Limitations

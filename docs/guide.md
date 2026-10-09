@@ -48,7 +48,7 @@ More than two tiers work. The audit always compares against the last tier.
 | `self_consistency` | `samples` (default 5) | sampling at nonzero temperature to be informative | Strong signal on tasks with a short checkable answer. Multiplies the cheap tier's cost by about `1 + samples`. Models that repeat the same mistake agree with themselves. |
 | `monitor` | 1 on the monitor backend | a second model (often the cheap one again) | Separates answering from grading. Costs one extra call; the monitor's own calibration is unknown until you sweep it. |
 | `combine` | sum of members | members | `min` is conservative: escalate if any signal is low. `ignore_missing` controls whether one missing member blocks acceptance. |
-| `calibrated` | same as `base` | eval-mode data to fit the map | Remaps scores so a threshold of 0.9 means about 90% correct. The map is monotone, so it keeps the ranking (up to ties) and the accuracy/cost frontier; it changes which threshold value lands where. |
+| `calibrated` | same as `base` | eval-mode data to fit the map (`shadowgate calibrate`) | Remaps scores so a threshold of 0.9 means about 90% correct. The map is monotone, so it keeps the ranking (up to ties) and the accuracy/cost frontier; it changes which threshold value lands where. |
 
 What matters for routing is ranking: a higher score should mean a more likely correct answer.
 `shadowgate sweep` reports AUROC and AURC (ranking quality) and ECE and Brier score (calibration)
@@ -69,9 +69,14 @@ tier's answer and confidence. `sweep` then replays the routing rule for every th
 without new model calls. A typical sequence:
 
 1. Run eval mode on a few hundred representative tasks, ideally with references.
-2. `shadowgate sweep` to pick a threshold. Put it in the config.
-3. Run serve mode on live or new traffic with audits on.
-4. `shadowgate audit --fail-on-breach` in CI or a scheduled job.
+2. Optionally, `shadowgate calibrate` to remap the cheap tier's confidence, then re-run eval mode.
+3. `shadowgate sweep` to pick a threshold. Put it in the config.
+4. Run serve mode on live or new traffic with audits on.
+5. `shadowgate audit --fail-on-breach` in CI or a scheduled job.
+
+`shadowgate export` writes a run to JSONL with a header line holding its mode, note and redacted
+config; `shadowgate import` loads it into another ledger with the same tolerance. The
+[results](results.md) report is rebuilt this way from committed decisions.
 
 ## Threshold selection
 
@@ -144,16 +149,33 @@ full population it is weighting back to.
 
 ## Reading the numbers
 
-Output of `shadowgate audit` on the demo serve run (400 simulated tasks, threshold 0.80):
+Output of `shadowgate audit` on the demo serve run (400 simulated tasks, threshold 0.55; run
+`shadowgate demo`, then the `audit` command it prints):
 
 ```text
-Status: INCONCLUSIVE - The interval for skipped-case error vs references straddles tolerance 5%.
-  About 31 more audits would resolve it if the rate holds.
+Status: BREACH - Skipped-case error vs references exceeds tolerance 5%: the lower bound 8.9% is
+  above it.
 
-The fast tier (fast) answered 47% of 400 tasks without escalating. On those, it disagrees with slow
-  on an estimated 0% (95% CI 0.0-7.4%, 51 audits, n_eff 48). Against reference answers, the kept
-  answers are wrong on 2.1% (95% CI 0.8-5.3%, 189 graded). That is about 4.0 wrong answers among the
-  189 kept (1.6-10.0).
+The fast tier (fast) answered 65% of 400 tasks without escalating. On those, it disagrees with slow
+  on an estimated 10.8% (95% CI 5.1-19.4%, 89 audits, n_eff 84). Against reference answers, the kept
+  answers are wrong on 12.3% (95% CI 8.9-16.9%, 260 graded). That is about 32.0 wrong answers among
+  the 260 kept (23.0-43.8).
+
+  Kept by fast tier:               65.0%  (260 of 400 tasks)
+  Escalation rate:                 35.0%  (95% CI 30.5-39.8%)
+  Served accuracy:                 92.0%  (95% CI 88.9-94.3%, 400 graded)
+  Cost per task:                   $0.00038
+  Savings vs always slow:          54.8%  (95% CI 53.6-55.9%; always slow: $0.00084/task)
+  Audit overhead:                  44.6%  ($0.068 audit spend)
+  Expected wrong-but-kept:         32.0  (95% CI 23.0-43.8)
+
+By confidence bin:
+  bin              kept  audited  disagreement (CI)           error vs refs (CI)
+  [0.50, 0.70)       13        7  100% (59.0-100.0%)          100% (77.2-100.0%)
+  [0.70, 0.80)       15        9  77.8% (40.0-97.2%)          86.7% (62.1-96.3%)
+  [0.80, 0.90)        6        4  75.0% (19.4-99.4%)          66.7% (30.0-90.3%)
+  [0.90, 0.95)        3        0  -                           33.3% (6.1-79.2%)
+  [0.95, 1.00]      223       69  0% (0.0-5.2%)               0.45% (0.1-2.5%)
 ```
 
 | Field | Meaning |
@@ -168,14 +190,19 @@ The fast tier (fast) answered 47% of 400 tasks without escalating. On those, it 
 | by confidence bin | Disagreement and error per confidence band. Shows whether errors cluster near the threshold. |
 | status | `ok`, `breach`, `inconclusive`, `no-data` or `n/a`; see [cli.md](cli.md#audit). |
 
-In the example above, disagreement is 0% while error is 2.1%. The simulated slow tier sometimes
-makes the same mistake as the fast tier, so the two agree on a wrong answer. Disagreement is a
-lower bound on error in that case. This is the main reason to keep references for at least a
-calibration set.
+In the example above, the threshold of 0.55 is too permissive. The 223 kept answers at
+confidence 0.95 or above are almost all right; the 37 below 0.95 are mostly wrong. The error
+interval (8.9-16.9%) lies entirely above the 5% tolerance, so the status is `breach`.
+
+Disagreement (10.8%) and error (12.3%) agree here because the simulated slow tier is near-perfect.
+With a weaker final tier, both tiers can make the same mistake and agree on it, and disagreement
+then understates error. The disagreement interval is also wider: it rests on 89 audits, while the
+error rate uses all 260 graded kept answers. Keep references for at least a calibration set.
 
 The status uses the error rate when every skipped case has a reference, otherwise the
 disagreement rate. `inconclusive` means the interval still contains the tolerance; the output
-estimates how many more audits would move it to `ok` or `breach` if the observed rate holds.
+estimates how many more audits (or, when every kept case is already graded, more tasks) would
+move it to `ok` or `breach` if the observed rate holds.
 
 ## Choosing a tolerance and an audit rate
 
@@ -218,8 +245,8 @@ tolerance. `inconclusive` exits 0. If you want to fail on `inconclusive` too, re
 
 ## Python API
 
-The CLI is a thin layer over the library. The same cascade in Python, offline
-(from [`examples/python_api.py`](../examples/python_api.py)):
+The CLI is a thin layer over the library. A two-tier simulated cascade in Python, offline
+(condensed from [`examples/python_api.py`](../examples/python_api.py)):
 
 ```python
 import shadowgate as sg
@@ -256,8 +283,7 @@ returns the cascade and run settings from a TOML file. The `callable` confidence
 ## Limitations
 
 - **The audit tier is a proxy.** Disagreement with the last tier is not error unless tasks carry
-  references. When both tiers make the same mistake, disagreement understates error, as the demo
-  shows.
+  references. When both tiers make the same mistake, disagreement understates error.
 - **Comparator and judge errors.** Agreement is decided by a comparator. A `numeric` comparator
   on free text, or a model `judge` that misreads equivalent answers, biases the rate in either
   direction. Undecided comparisons are excluded and counted; if they are not random, the estimate
@@ -275,5 +301,5 @@ returns the cascade and run settings from a TOML file. The `callable` confidence
 - **Distribution shift.** A threshold chosen in eval mode holds for tasks like the eval set. The
   serve-mode audit is how you detect when it stops holding.
 - **Sequential checks.** Running `audit` repeatedly on a growing run and stopping at the first
-  `ok` inflates the false-acceptance rate. Fix the run size, or treat repeated checks as
-  monitoring rather than a test.
+  `ok` inflates the false-acceptance rate. Fix the run size, use a stricter `--level` (for example
+  0.99), or treat repeated checks as monitoring rather than a test.

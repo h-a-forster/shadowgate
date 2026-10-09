@@ -303,8 +303,8 @@ class Ledger:
     def decisions(self, run_id: str | None = None) -> Iterator[Decision]   # None -> latest run
     def pending_audits(self, run_id: str | None = None) -> Iterator[Decision]
     def latest_run_id(self) -> str | None
-    def export_jsonl(self, path, run_id=None) -> int
-    def import_jsonl(self, path) -> int
+    def export_jsonl(self, path, run_id=None) -> int    # {"shadowgate_run": {run_id, created_at, mode, note, config}} line, then decisions
+    def import_jsonl(self, path) -> int                 # header creates the run (or fills an empty config); mode mismatch -> LedgerError
     def close(self)
 ```
 Tables: `meta(key, value)`, `runs(run_id PK, created_at, mode, config_json, note)`,
@@ -514,18 +514,25 @@ nothing (CLI exits 130). A task whose route raised unexpectedly is recorded as a
 ## cli.py
 
 ```
-shadowgate init [DIR]                         example config + tasks
-shadowgate demo [--out DIR] [--n N] [--seed S]  fully offline simulated end-to-end; writes report
+shadowgate init [--force] [DIR]               example config + tasks
+shadowgate demo [--out DIR] [--n N] [--seed S] [--open] [-q]   offline simulated end-to-end; writes report
 shadowgate run -c CONFIG -t TASKS [--ledger PATH] [--run-id ID] [--mode serve|eval]
-               [--limit N] [--workers N] [--max-cost USD] [--no-resume]
-shadowgate audit [--ledger PATH] [--run-id ID] [--tolerance T] [--json] [--fail-on-breach]
-shadowgate audit --run-pending -c CONFIG [--ledger PATH] [--run-id ID]
-shadowgate sweep [--ledger PATH] [--run-id ID] [--objective O] [--max-drop X] [--json]
-shadowgate report [--ledger PATH] [--run-id ID] -o OUT(.html|.md) [--tolerance T]
-shadowgate runs [--ledger PATH]
-shadowgate export [--ledger PATH] [--run-id ID] -o OUT.jsonl
-shadowgate datasets make arithmetic -n N [--seed S] -o OUT.jsonl
+               [--limit N] [--workers N] [--max-cost USD] [--no-resume] [-q]
+shadowgate audit [--ledger PATH] [--run-id ID] [--tolerance T] [--level L] [--json] [--fail-on-breach]
+shadowgate audit --run-pending -c CONFIG [--ledger PATH] [--run-id ID] [--workers N] [--max-cost USD]
+shadowgate sweep [--ledger PATH] [--run-id ID] [--objective O] [--max-drop X] [--min-accuracy X]
+                 [--budget X] [--holdout F] [--seed S] [--level L] [--json]
+shadowgate calibrate [--ledger PATH] [--run-id ID] [--tier NAME] [--truth auto|reference|audit-tier]
+                     [--max-knots K] [--json]
+shadowgate report [--ledger PATH] [--run-id ID] [--sweep-run-id ID] -o OUT(.html|.md)
+                  [--tolerance T] [--level L]
+shadowgate runs [--ledger PATH] [--json]
+shadowgate export [--ledger PATH] [--run-id ID] -o OUT.jsonl      # {"shadowgate_run": {...}} header, then decisions
+shadowgate import [--ledger PATH] FILE.jsonl [FILE.jsonl ...]     # header restores mode, note, redacted config
+shadowgate datasets make arithmetic -n N [--seed S] [--min-steps K] [--max-steps K] -o OUT.jsonl
+shadowgate datasets show TASKS [--limit N]
 ```
-Default ledger: `.shadowgate/ledger.sqlite`. Exit codes: 0 ok, 1 runtime error, 2 usage/config
-error, 3 audit breach with `--fail-on-breach`, 130 interrupted. Errors print one line to stderr
-(`shadowgate: error: ...`), no tracebacks unless `SHADOWGATE_DEBUG=1`.
+Default ledger: `.shadowgate/ledger.sqlite`. `--level` is in (0.5, 1), default 0.95. Exit codes: 0
+ok, 1 runtime error, 2 usage/config error, 3 audit breach with `--fail-on-breach`, 4 spending cap
+reached, 130 interrupted. Errors print one line to stderr (`shadowgate: error: ...`), no
+tracebacks unless `SHADOWGATE_DEBUG=1`. Full reference: [cli.md](cli.md).

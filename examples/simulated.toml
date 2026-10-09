@@ -6,7 +6,7 @@
 #
 # A simulated model answers task i correctly with probability sigmoid(skill - difficulty_i),
 # where difficulty comes from each task's meta.difficulty (the built-in arithmetic generator
-# uses roughly 2-16). Its verbal confidence tracks that probability plus `overconfidence`
+# uses roughly 2-17). Its verbal confidence tracks that probability plus `overconfidence`
 # and noise, so the fast tier below is a cheap, clearly overconfident model.
 
 [run]

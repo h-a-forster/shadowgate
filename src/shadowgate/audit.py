@@ -795,18 +795,18 @@ def summarize(
     if all_slow is not None and mode != "eval" and (states["none"] or states["invalid"]):
         all_slow = None
         notes.append(
-            "No all-slow cost estimate: some skipped cases have no usable inclusion probability, "
-            "so reference-tier costs cannot be reweighted to the whole run."
+            f"No always-{reference_tier} cost estimate: some skipped cases have no usable "
+            "inclusion probability, so reference-tier costs cannot be reweighted to the whole run."
         )
     if n_ref_cost_unknown:
         notes.append(
             f"{n_ref_cost_unknown} reference-tier attempt(s) have unknown cost and were left out "
-            "of the all-slow cost estimate."
+            f"of the always-{reference_tier} cost estimate."
         )
     if all_slow is not None and mode != "eval" and reference_tier != final:
         notes.append(
-            f"The all-slow cost uses audit tier {reference_tier!r}, which is not the final tier; "
-            "it reflects skipped cases only."
+            f"The always-{reference_tier} cost uses audit tier {reference_tier!r}, which is not "
+            "the final tier; it reflects skipped cases only."
         )
     est_savings: Estimate | None = None
     if (
@@ -830,7 +830,7 @@ def summarize(
         )
         notes.append(
             "est_savings treats serving cost per task as exact; its interval reflects only the "
-            "uncertainty in the all-slow cost estimate, and excludes audit cost."
+            f"uncertainty in the always-{reference_tier} cost estimate, and excludes audit cost."
         )
 
     return AuditSummary(

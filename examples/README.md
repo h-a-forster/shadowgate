@@ -15,7 +15,7 @@ then `shadowgate sweep` to choose thresholds from the accuracy/cost curve.
 
 | File | Needs | What it shows |
 |---|---|---|
-| [`simulated.toml`](simulated.toml) | nothing (offline) | Two simulated models: a cheap, somewhat overconfident fast tier and a strong slow tier. Verbal confidence, numeric answer comparison, inline audits with confidence strata and a 5% tolerance. Deterministic; used by `shadowgate demo` and the test suite. |
+| [`simulated.toml`](simulated.toml) | nothing (offline) | Two simulated models: a cheap, overconfident fast tier and a near-perfect slow tier. Verbal confidence, numeric answer comparison, inline audits with confidence strata and a 5% tolerance. The threshold (0.55) is deliberately too low, so on enough tasks the audit reports a breach. Deterministic; used by `shadowgate demo` and the test suite. |
 | [`basic.toml`](basic.toml) | `ANTHROPIC_API_KEY`, `pip install "shadowgate[anthropic]"` | The smallest useful config: two Anthropic tiers, a verbal-confidence threshold, default audit settings. |
 | [`anthropic.toml`](anthropic.toml) | `ANTHROPIC_API_KEY`, `pip install "shadowgate[anthropic]"` | A fuller Anthropic setup: per-tier effort and token limits, retries, a spending cap, response cache, stratified inline audits, an explicit audit tier and tolerance. Comments show a monitor-model confidence alternative and a model-graded judge. |
 | [`claude-code.toml`](claude-code.toml) | the `claude` CLI, logged in | The same cascade through `claude -p`, using the CLI's own login and its reported cost. Each call runs in an empty directory with tools disabled. |
