@@ -52,7 +52,9 @@ Conventions
 * **Status.** ``skipped_error`` drives the status when every skipped case is graded against a
   reference; otherwise ``disagreement`` does. ``breach`` if lo > tolerance, ``ok`` if
   hi <= tolerance, else ``inconclusive``; ``no-data`` when the metric has no observations;
-  ``n/a`` when no tolerance is given. The weighted interval is Korn-Graubard (Clopper-Pearson at
+  ``n/a`` when no tolerance is given. When references drive the status, ``audit_only_status``
+  gives the status the disagreement alone would yield (what a run without references would
+  report), so the two can be compared. The weighted interval is Korn-Graubard (Clopper-Pearson at
   the effective sample size, see :func:`~shadowgate.stats.weighted_proportion`).
 * **Fixed-sample status.** The status uses a fixed-sample confidence interval. Checking it
   repeatedly as audits accumulate and stopping at the first ``ok`` (optional stopping) inflates
@@ -169,6 +171,9 @@ class AuditSummary:
     n_unrepresented: int = 0  # skipped cases in pi strata without a completed audit (excluded)
     sparse_strata: int = 0  # large pi strata with too few completed audits ("ok" is blocked)
     tasks_to_resolve: int | None = None  # extra skipped cases to resolve "inconclusive"
+    # status from the audit disagreement alone, same rules; set only when references drive
+    # ``status`` (status_metric == "skipped_error") and there are completed audits
+    audit_only_status: str | None = None
 
 
 # --------------------------------------------------------------------------- tier order
@@ -710,13 +715,10 @@ def summarize(
     elif tolerance is None:
         status = "n/a"
     else:
-        assert metric.lo is not None and metric.hi is not None
-        if metric.lo > tolerance:
-            status = "breach"
-        elif metric.hi <= tolerance and not (metric_name == "disagreement" and sparse):
-            status = "ok"
-        else:
-            status = "inconclusive"
+        status = _status_of(
+            metric, float(tolerance), block_ok=metric_name == "disagreement" and bool(sparse)
+        )
+        if status == "inconclusive":
             extra = _extra_to_resolve(metric, float(tolerance), level)
             if extra is not None and metric.n > 0:
                 # Each extra skipped case yields metric.n / n_skipped observations at the
@@ -725,11 +727,20 @@ def summarize(
             census = all(c.pi is not None and c.pi >= 1.0 for c in cases)
             if metric_name == "disagreement" and not census:
                 audits_to_resolve = extra
-            if metric.hi <= tolerance:
+            if metric.hi is not None and metric.hi <= tolerance:
                 notes.append(
                     "The interval is below tolerance, but the status is held at 'inconclusive' "
                     "because a large stratum has too few completed audits (see above)."
                 )
+
+    audit_only_status: str | None = None
+    if (
+        metric_name == "skipped_error"
+        and tolerance is not None
+        and disagreement is not None
+        and disagreement.value is not None
+    ):
+        audit_only_status = _status_of(disagreement, float(tolerance), block_ok=bool(sparse))
 
     # ---- expected wrong skipped cases
     expected_wrong: tuple[float, float, float] | None = None
@@ -877,7 +888,19 @@ def summarize(
         n_unrepresented=n_unrepresented,
         sparse_strata=len(sparse),
         tasks_to_resolve=tasks_to_resolve,
+        audit_only_status=audit_only_status,
     )
+
+
+def _status_of(metric: Estimate, tolerance: float, *, block_ok: bool) -> str:
+    """``breach`` if lo > tolerance, ``ok`` if hi <= tolerance (unless ``block_ok``), else
+    ``inconclusive``."""
+    assert metric.lo is not None and metric.hi is not None
+    if metric.lo > tolerance:
+        return "breach"
+    if metric.hi <= tolerance and not block_ok:
+        return "ok"
+    return "inconclusive"
 
 
 def _flip(x: bool | None) -> bool | None:

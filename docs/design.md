@@ -418,6 +418,7 @@ class AuditSummary:
     n_unrepresented: int = 0             # skipped cases in π strata with no completed audit (excluded)
     sparse_strata: int = 0               # π strata with >= 10% of skipped cases and < 10 audits
     tasks_to_resolve: int | None = None  # extra skipped cases for CI to clear tolerance, if inconclusive
+    audit_only_status: str | None = None  # status from disagreement alone, when references drive status
 
 def summarize(decisions: Iterable[Decision], *, tolerance: float | None = None,
               bins: Sequence[float] = (0, .5, .7, .8, .9, .95, 1.0), level=0.95) -> AuditSummary

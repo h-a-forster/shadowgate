@@ -48,6 +48,7 @@ Serve mode: confidence threshold 0.55, stratified shadow audits
   cost per task           $0.000379
   est. savings vs slow    54.8% [53.6%, 55.9%]
   audit status            breach (tolerance 5.0%)
+  audit-only status       breach (disagreement, no references)
 
 Eval mode: every tier on every task, threshold sweep
   only:fast               accuracy 57.0% [52.1%, 61.8%]       cost/task $0.000027
@@ -62,7 +63,8 @@ The fast tier reports 95% mean confidence on the answers it keeps; the audit est
 The demo config sets the threshold too low on purpose. The fast tier answers 65% of tasks without
 escalating and is overconfident on them: the audit puts disagreement on skipped cases at 10.8%,
 and grading against references puts the error at 12.3%. The lower bound of the error interval
-(8.9%) is above the 5% tolerance, so the status is `breach`. The eval-mode sweep recommends 0.89
+(8.9%) is above the 5% tolerance, so the status is `breach`; the audit alone, without
+references, also gives `breach`. The eval-mode sweep recommends 0.89
 instead. The demo writes `shadowgate-demo/report.html` and prints the `audit`, `sweep` and
 `calibrate` commands to explore the two runs.
 
@@ -155,24 +157,51 @@ trade-offs. Everything the CLI does is also available from the
 
 ## Results
 
-One real run: Claude Haiku 5.5 as the fast tier, Claude Opus 5.5 as the final tier, verbal
-confidence, 200 generated multi-step arithmetic problems with reference answers. Run through the
-Claude Code CLI with Haiku at effort `low`; costs are list-price estimates, not billed amounts.
+Main run (2026-10-10): Claude Haiku 5.5 (effort `low`, verbal confidence, threshold 0.80) in front
+of Claude Opus 5.5 or Claude Sonnet 5.5 on 1680 MMLU-Pro questions (120 per subject) and 520
+BIG-Bench Hard examples. Both have gold answers graded by exact match. Every tier answered every
+task, so the cheap tier's true error on the cases it served alone is known. Run through the
+Claude Code CLI for $58 of CLI-reported cost.
 
-| Policy | Accuracy (95% CI) | Cost per task |
+| MMLU-Pro | Haiku -> Opus | Haiku -> Sonnet |
 |---|---|---|
-| Haiku only | 95.0% (91.0-97.3) | $0.00047 |
-| Opus only | 100.0% (98.1-100.0) | $0.0115 |
-| Cascade, threshold 0.80 | 98.5% (95.7-99.5) | $0.0016 |
-| Oracle router (cost lower bound) | 100.0% | $0.0010 |
+| Accuracy: Haiku only / final tier only / cascade | 83.0% / 91.2% / 88.1% | 83.0% / 88.3% / 86.2% |
+| Served by Haiku alone | 80.0% | 80.0% |
+| Haiku error on those, vs gold | 9.3% (7.9-11.0) | 9.3% (7.9-11.0) |
+| Haiku disagreement with the final tier on those | 6.1% (4.9-7.5) | 4.5% (3.5-5.7) |
+| Audit-only estimate (~465 weighted audits) | 5.1% (3.1-7.8) | 4.1% (2.3-6.6) |
+| Haiku errors the final tier shared (audit cannot see them) | 44% | 61% |
+| Saving vs final tier alone: serving / with audit | 72% / 45% | 69% / 41% |
 
-Haiku answered 181 of 200 tasks without escalating. Its error on those skipped cases, against
-references, was 1.7% (95% CI 0.6-4.8%), so the upper bound of 4.8% passes a 5% tolerance,
-narrowly. The errors sit near the threshold: Opus disagreed with 2 of 15 audited answers in the
-[0.80, 0.90) bin (13.3%, 95% CI 1.7-40.5%), against 0 of 36 above 0.90.
+Haiku answers are shared across the two pairs (one response cache), so the Opus and Sonnet
+columns are paired comparisons, not independent replications.
+Savings are notional: Haiku is costed from the price table and Opus/Sonnet from the CLI's
+reported `total_cost_usd`, which includes CLI prompt overhead (see
+[results](docs/results.md)).
 
-Setup, per-bin tables and caveats: [docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md). Full report:
-[arithmetic-haiku-opus.html](https://h-a-forster.github.io/shadowgate/results/arithmetic-haiku-opus.html).
+The audit tracks disagreement, conservatively: re-drawn 5000 times offline, its interval covered
+the true disagreement rate 99.8-99.9% of the time, above the 95% nominal level, partly because the
+interval ignores the finite-population correction with about a third of skipped cases audited. It
+covered the gold-graded error only 38.6% (Opus) and 0.8% (Sonnet) of the time, because the final
+tier repeats many of Haiku's mistakes. A weaker final tier repeats more of them and makes the
+cheap tier look better. On BBH, the Haiku ->
+Sonnet audit reported `ok` against a 5% tolerance (0.8%, upper bound 4.8%) while the gold-graded
+error was 5.4% (3.7-7.8). That `ok` was mostly a lucky draw (1.4% of re-draws); the lasting point
+is that the audit cannot see errors the final tier shares.
+
+Some of that gap is probably label noise. In 13 hand-checked MMLU-Pro cases (drawn with two ad hoc
+seeds) where both models gave the same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous,
+and 2 were real errors. That shows label noise exists, not how large it is, and noisy labels cut
+both ways. Read the audit as disagreement with a final tier that is itself wrong 9-12% of the time
+on MMLU-Pro. Do not read it as error.
+
+A drift check (offline): a threshold tuned on STEM questions (0.88, 3.3% error) gave 12.3% error
+on the humanities questions Haiku served alone. At that volume (~41 audits) the audit never said
+`ok`, but it confirmed the breach in only 8-11% of re-draws.
+
+An earlier run on generated arithmetic, where Opus was 100% correct, is also in the results
+document. Setup, BBH numbers, coverage, drift and limitations:
+[docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md).
 
 ## Documentation
 
@@ -181,13 +210,14 @@ Setup, per-bin tables and caveats: [docs/results.md](https://github.com/h-a-fors
 - [Configuration](https://github.com/h-a-forster/shadowgate/blob/main/docs/configuration.md): every TOML key.
 - [CLI](https://github.com/h-a-forster/shadowgate/blob/main/docs/cli.md): every command, option and exit code.
 - [Examples](https://github.com/h-a-forster/shadowgate/blob/main/examples/README.md): configs for each backend.
-- [Results](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md): the Haiku 5.5 -> Opus 5.5 experiment and how to reproduce it.
+- [Results](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md): the MMLU-Pro, BIG-Bench Hard and arithmetic experiments and how to reproduce them.
 - [Design](https://github.com/h-a-forster/shadowgate/blob/main/docs/design.md): architecture and module contracts.
 
 ## Limitations
 
 - Disagreement with the final tier is not error unless tasks carry references; a mistake both
-  tiers make is invisible to the audit.
+  tiers make is invisible to the audit. On MMLU-Pro, 44-61% of the cheap tier's errors against
+  gold labels were shared with the final tier (some of them label noise).
 - Costs are estimates from a built-in price table or your `pricing` override. Claude Code CLI
   costs on a subscription are notional.
 - A threshold chosen on an eval set holds for tasks like that set. The serve-mode audit is how

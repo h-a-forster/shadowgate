@@ -603,6 +603,8 @@ def _print_demo_summary(summary: AuditSummary, sw: SweepResult, threshold: float
             status += f"; ~{summary.tasks_to_resolve} more skipped tasks to resolve"
         status += ")"
     _out(f"  audit status            {status}")
+    if summary.audit_only_status is not None:
+        _out(f"  audit-only status       {summary.audit_only_status} (disagreement, no references)")
     _out("")
     _out("Eval mode: every tier on every task, threshold sweep")
     for name, p in sw.baselines.items():
