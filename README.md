@@ -24,8 +24,9 @@ notional; see [Results](#results) and the [limitations](https://github.com/h-a-f
   against 91.2% for Opus alone and 83.0% for Haiku alone, saving 72% serving cost and 45% once
   the audit is paid for; Haiku -> Sonnet saved 69% and 41% ([accuracy and cost](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#accuracy-and-cost)).
 - **Label noise cuts both ways.** In 13 hand-checked MMLU-Pro cases where both models gave the
-  same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous and 2 were real errors, so true
-  error lies somewhere between the disagreement rate and the gold-graded rate
+  same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous and 2 were real errors. Wrong
+  labels can also hide real errors, so true error is not pinned between the disagreement rate
+  and the gold-graded rate; this run cannot size the noise
   ([review](https://github.com/h-a-forster/shadowgate/blob/main/experiments/mmlu-pro-cascade/shared-errors-review.md)).
 - **A threshold tuned on one domain does not transfer, and the audit is slow to notice.** A
   threshold tuned on STEM (0.88, 3.3% error) gave 12.3% error on the humanities questions Haiku
