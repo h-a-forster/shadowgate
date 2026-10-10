@@ -1,0 +1,202 @@
+{
+ "opus": {
+  "truth": {
+   "threshold": 0.8,
+   "n_tasks": 520,
+   "n_skipped": 466,
+   "skip_rate": 0.8961538461538462,
+   "cheap_error_skipped": {
+    "value": 0.0536480686695279,
+    "lo": 0.036599236402976694,
+    "hi": 0.07799571431898944,
+    "n": 466
+   },
+   "disagreement_skipped": {
+    "value": 0.032188841201716736,
+    "lo": 0.019602225299118148,
+    "hi": 0.05242517497678867,
+    "n": 466
+   },
+   "cheap_wrong": 25,
+   "disagree": 15,
+   "shared_errors": 13,
+   "caught_errors": 11,
+   "both_wrong_differ": 1,
+   "false_alarms": 3,
+   "final_error_all": {
+    "value": 0.05,
+    "lo": 0.03434688812726864,
+    "hi": 0.07225303419733706,
+    "n": 520
+   },
+   "final_error_skipped": {
+    "value": 0.03648068669527897,
+    "lo": 0.022899499247908715,
+    "hi": 0.05764141111720997,
+    "n": 466
+   },
+   "cheap_error_all": {
+    "value": 0.08846153846153847,
+    "lo": 0.06697573354237252,
+    "hi": 0.11598316978013012,
+    "n": 520
+   }
+  },
+  "auroc": {
+   "n": 520,
+   "cheap_correct": 0.8359933957072097,
+   "agrees_with_final": 0.8585028934104909
+  },
+  "coverage": {
+   "threshold": 0.8,
+   "seeds": 1000,
+   "tolerance": 0.05,
+   "true_error": 0.0536480686695279,
+   "true_disagreement": 0.032188841201716736,
+   "audits_mean": 122.267,
+   "estimate_mean": 0.03268779410096307,
+   "coverage_of_disagreement": 0.999,
+   "coverage_of_error": 0.986,
+   "upper_median": 0.08573169015243964,
+   "status": {
+    "inconclusive": 0.994,
+    "ok": 0.006
+   }
+  },
+  "serve_audit": {
+   "n_skipped": 466,
+   "n_audited": 127,
+   "disagreement_weighted": {
+    "value": 0.02663934426229508,
+    "lo": 0.005439101459136619,
+    "hi": 0.07640394261763239,
+    "n": 127,
+    "n_eff": 110.97110904007455
+   },
+   "audit_only_status": "inconclusive",
+   "skipped_error_ref": {
+    "value": 0.0536480686695279,
+    "lo": 0.036599236402976694,
+    "hi": 0.07799571431898944,
+    "n": 466
+   },
+   "reference_status": "inconclusive",
+   "final_tier_error_on_audits": {
+    "value": 0.06557377049180328,
+    "lo": 0.02734417320775906,
+    "hi": 0.12884675806204227,
+    "n": 127
+   }
+  },
+  "cost": {
+   "cheap_only_per_task": 0.00048049025,
+   "final_only_per_task": 0.014243902307692307,
+   "serving_per_task": 0.0020447519807692306,
+   "audit_per_task": 0.003460585576923077,
+   "all_in_per_task": 0.005505337557692308,
+   "saving_serving_only": 0.8564472055059674,
+   "saving_all_in": 0.6134951336531427,
+   "audit_overhead": 1.6924231444545237
+  }
+ },
+ "sonnet": {
+  "truth": {
+   "threshold": 0.8,
+   "n_tasks": 520,
+   "n_skipped": 466,
+   "skip_rate": 0.8961538461538462,
+   "cheap_error_skipped": {
+    "value": 0.0536480686695279,
+    "lo": 0.036599236402976694,
+    "hi": 0.07799571431898944,
+    "n": 466
+   },
+   "disagreement_skipped": {
+    "value": 0.027896995708154508,
+    "lo": 0.01637435234060753,
+    "hi": 0.047139537846087425,
+    "n": 466
+   },
+   "cheap_wrong": 25,
+   "disagree": 13,
+   "shared_errors": 14,
+   "caught_errors": 10,
+   "both_wrong_differ": 1,
+   "false_alarms": 2,
+   "final_error_all": {
+    "value": 0.057692307692307696,
+    "lo": 0.04070754806446067,
+    "hi": 0.08116417045972442,
+    "n": 520
+   },
+   "final_error_skipped": {
+    "value": 0.03648068669527897,
+    "lo": 0.022899499247908715,
+    "hi": 0.05764141111720997,
+    "n": 466
+   },
+   "cheap_error_all": {
+    "value": 0.08846153846153847,
+    "lo": 0.06697573354237252,
+    "hi": 0.11598316978013012,
+    "n": 520
+   }
+  },
+  "auroc": {
+   "n": 520,
+   "cheap_correct": 0.8359933957072097,
+   "agrees_with_final": 0.8599595959595959
+  },
+  "coverage": {
+   "threshold": 0.8,
+   "seeds": 1000,
+   "tolerance": 0.05,
+   "true_error": 0.0536480686695279,
+   "true_disagreement": 0.027896995708154508,
+   "audits_mean": 122.105,
+   "estimate_mean": 0.02848620896351565,
+   "coverage_of_disagreement": 1.0,
+   "coverage_of_error": 0.963,
+   "upper_median": 0.08012641133314569,
+   "status": {
+    "inconclusive": 0.984,
+    "ok": 0.016
+   }
+  },
+  "serve_audit": {
+   "n_skipped": 466,
+   "n_audited": 122,
+   "disagreement_weighted": {
+    "value": 0.008016032064128256,
+    "lo": 0.00013061536934300122,
+    "hi": 0.0479279484686308,
+    "n": 122,
+    "n_eff": 109.54729432468103
+   },
+   "audit_only_status": "ok",
+   "skipped_error_ref": {
+    "value": 0.0536480686695279,
+    "lo": 0.036599236402976694,
+    "hi": 0.07799571431898944,
+    "n": 466
+   },
+   "reference_status": "inconclusive",
+   "final_tier_error_on_audits": {
+    "value": 0.036072144288577156,
+    "lo": 0.009810849424349843,
+    "hi": 0.09024234340834125,
+    "n": 122
+   }
+  },
+  "cost": {
+   "cheap_only_per_task": 0.00048049025,
+   "final_only_per_task": 0.007329320576923076,
+   "serving_per_task": 0.0012857664038461538,
+   "audit_per_task": 0.001708445,
+   "all_in_per_task": 0.0029942114038461537,
+   "saving_serving_only": 0.824572224621408,
+   "saving_all_in": 0.5914749024249729,
+   "audit_overhead": 1.3287366934533944
+  }
+ }
+}

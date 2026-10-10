@@ -1,0 +1,34 @@
+== haiku -> opus  (1680 tasks, threshold 0.8)
+  skipped cases            1344 (80.0%)
+  cheap error on skipped   9.3% (7.9%-11.0%)  [truth]
+  disagreement on skipped  6.1% (4.9%-7.5%)  [census]
+  of 125 cheap errors: 65 flagged with final right, 5 flagged with final also wrong, 55 shared (invisible); 12 false alarms
+  final-tier error, all    8.8% (7.5%-10.2%)
+  cheap-tier error, all    17.0% (15.2%-18.8%)
+  AUROC cheap correct      0.819  (agrees with final 0.845, n 1680)
+  serve audit              462 of 1344 audited; weighted disagreement 5.1% (3.1%-7.8%), audit-only status inconclusive
+  reference-graded         9.3% (7.9%-11.0%), status breach
+  cost/task (table)        final only $0.01780; serving $0.00495 + audit $0.00476 = $0.00970
+  saving vs final only     serving 72.2%, all-in 45.5%
+  coverage (1000 seeds)    mean est 6.12%, audits 454.9; covers disagreement 99.7%, covers error 41.6%; status {'breach': 0.063, 'inconclusive': 0.937}
+  drift: threshold 0.88 picked on STEM (error 3.3% (2.1%-5.2%), skip 71.2%)
+    humanities: error 12.3% (7.6%-19.3%), disagreement 9.8% (5.7%-16.4%), skip 33.9%
+    humanities audit sim: mean est 10.00%, covers error 99.5%, status {'breach': 0.106, 'inconclusive': 0.894}
+
+== haiku -> sonnet  (1680 tasks, threshold 0.8)
+  skipped cases            1344 (80.0%)
+  cheap error on skipped   9.3% (7.9%-11.0%)  [truth]
+  disagreement on skipped  4.5% (3.5%-5.7%)  [census]
+  of 125 cheap errors: 46 flagged with final right, 3 flagged with final also wrong, 76 shared (invisible); 11 false alarms
+  final-tier error, all    11.7% (10.3%-13.4%)
+  cheap-tier error, all    17.0% (15.2%-18.8%)
+  AUROC cheap correct      0.819  (agrees with final 0.858, n 1680)
+  serve audit              471 of 1344 audited; weighted disagreement 4.1% (2.3%-6.6%), audit-only status inconclusive
+  reference-graded         9.3% (7.9%-11.0%), status breach
+  cost/task (table)        final only $0.00881; serving $0.00271 + audit $0.00245 = $0.00516
+  saving vs final only     serving 69.3%, all-in 41.4%
+  coverage (1000 seeds)    mean est 4.44%, audits 455.1; covers disagreement 99.8%, covers error 0.7%; status {'inconclusive': 0.99, 'ok': 0.01}
+  drift: threshold 0.88 picked on STEM (error 3.3% (2.1%-5.2%), skip 71.2%)
+    humanities: error 12.3% (7.6%-19.3%), disagreement 9.0% (5.1%-15.4%), skip 33.9%
+    humanities audit sim: mean est 9.18%, covers error 99.3%, status {'breach': 0.078, 'inconclusive': 0.922}
+

@@ -1,0 +1,58 @@
+# Haiku (low effort) -> Sonnet on a task-stratified BIG-Bench Hard sample, through the Claude
+# Code CLI via claude-budget (../mmlu-pro-cascade/claude_budget.py), which enforces the spending
+# cap across both experiments.
+# Both pair configs share one ledger and response cache, so Haiku runs once per task.
+# Reproduce with experiments/bbh-cascade/run.sh.
+
+[run]
+name = "bbh-haiku-sonnet"
+workers = 6
+max_cost_usd = 15.00
+cache = true
+ledger = "ledger.sqlite"
+seed = 2026
+
+[backends.haiku]
+type = "claude-code"
+model = "haiku"
+executable = "claude-budget"
+timeout_s = 600
+max_attempts = 3
+
+[backends.sonnet]
+type = "claude-code"
+model = "sonnet"
+executable = "claude-budget"
+timeout_s = 900
+max_attempts = 3
+
+[[tiers]]
+name = "haiku"
+backend = "haiku"
+effort = "low"
+threshold = 0.8
+confidence = { type = "verbal" }
+template = """
+{prompt}
+
+Think step by step, keeping the reasoning brief. Then finish with a final line of the form:
+ANSWER: <answer>"""
+
+[[tiers]]
+name = "sonnet"
+backend = "sonnet"
+template = """
+{prompt}
+
+Think step by step, keeping the reasoning brief. Then finish with a final line of the form:
+ANSWER: <answer>"""
+
+[answer]
+extractor = "final_line"
+comparator = "normalized"
+
+[audit]
+mode = "inline"
+rate = 0.2
+strata = [[0.8, 0.95, 0.5], [0.95, 1.0, 0.2]]
+tolerance = 0.05

@@ -14,11 +14,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference-based status; the demo prints it as `audit-only status`.
 - `experiments/arithmetic-haiku-opus/simulate_audit.py`: offline coverage check of the audit
   interval on the recorded run.
+- MMLU-Pro (1680 questions) and BIG-Bench Hard (520 examples) experiments with Haiku -> Opus and
+  Haiku -> Sonnet through the Claude Code CLI, in `experiments/mmlu-pro-cascade/` and
+  `experiments/bbh-cascade/`: raw decisions, configs, task builders, a budget guard around the
+  CLI, and `experiments/analyze_cascade.py` (error vs disagreement, coverage over 1000 seeds,
+  drift check).
 
 ### Changed
 
 - Results docs report both statuses, all-in cost including audit spend, and the limitations of the
   published run (final tier 100% correct, CLI cost overhead, cached serve-run audits).
+- docs/results.md and the README lead with the MMLU-Pro and BBH results, where the final tier
+  is often wrong and the audit's disagreement estimate falls below the gold-graded error.
 
 ## [0.1.0] - 2026-10-10
 

@@ -1,0 +1,410 @@
+{
+ "opus": {
+  "truth": {
+   "threshold": 0.8,
+   "n_tasks": 1680,
+   "n_skipped": 1344,
+   "skip_rate": 0.8,
+   "cheap_error_skipped": {
+    "value": 0.09300595238095238,
+    "lo": 0.07861707299295338,
+    "hi": 0.10971476467198606,
+    "n": 1344
+   },
+   "disagreement_skipped": {
+    "value": 0.06101190476190476,
+    "lo": 0.04942385813997585,
+    "hi": 0.0751022556119698,
+    "n": 1344
+   },
+   "cheap_wrong": 125,
+   "disagree": 82,
+   "shared_errors": 55,
+   "caught_errors": 65,
+   "both_wrong_differ": 5,
+   "false_alarms": 12,
+   "final_error_all": {
+    "value": 0.0875,
+    "lo": 0.0749118941020697,
+    "hi": 0.1019702329298257,
+    "n": 1680
+   },
+   "final_error_skipped": {
+    "value": 0.05357142857142857,
+    "lo": 0.042755675960460295,
+    "hi": 0.06693189734660307,
+    "n": 1344
+   },
+   "cheap_error_all": {
+    "value": 0.16964285714285715,
+    "lo": 0.1524540946089383,
+    "hi": 0.1883389508495061,
+    "n": 1680
+   }
+  },
+  "auroc": {
+   "n": 1680,
+   "cheap_correct": 0.819208954285355,
+   "agrees_with_final": 0.8454193208036843
+  },
+  "coverage": {
+   "threshold": 0.8,
+   "seeds": 1000,
+   "tolerance": 0.05,
+   "true_error": 0.09300595238095238,
+   "true_disagreement": 0.06101190476190476,
+   "audits_mean": 454.867,
+   "estimate_mean": 0.061204721007012707,
+   "coverage_of_disagreement": 0.997,
+   "coverage_of_error": 0.416,
+   "upper_median": 0.09065798659693813,
+   "status": {
+    "breach": 0.063,
+    "inconclusive": 0.937
+   }
+  },
+  "serve_audit": {
+   "n_skipped": 1344,
+   "n_audited": 462,
+   "disagreement_weighted": {
+    "value": 0.050946142649199416,
+    "lo": 0.031059418860347687,
+    "hi": 0.07820877648026725,
+    "n": 462,
+    "n_eff": 377.72629051620646
+   },
+   "audit_only_status": "inconclusive",
+   "skipped_error_ref": {
+    "value": 0.09300595238095238,
+    "lo": 0.07861707299295338,
+    "hi": 0.10971476467198606,
+    "n": 1344
+   },
+   "reference_status": "breach",
+   "final_tier_error_on_audits": {
+    "value": 0.04439592430858806,
+    "lo": 0.025963159252853085,
+    "hi": 0.07034584733741456,
+    "n": 462
+   }
+  },
+  "cost": {
+   "cheap_only_per_task": 0.0005792852380952381,
+   "final_only_per_task": 0.017798682916666666,
+   "serving_per_task": 0.004946320297619047,
+   "audit_per_task": 0.0047579016666666665,
+   "all_in_per_task": 0.009704221964285713,
+   "saving_serving_only": 0.7220962741581671,
+   "saving_all_in": 0.45477864796396306,
+   "audit_overhead": 0.9619073129891977
+  },
+  "drift": {
+   "target": 0.05,
+   "threshold": 0.88,
+   "stem": {
+    "threshold": 0.88,
+    "n_tasks": 720,
+    "n_skipped": 513,
+    "skip_rate": 0.7125,
+    "cheap_error_skipped": {
+     "value": 0.03313840155945419,
+     "lo": 0.02079123739006849,
+     "hi": 0.05242552603877695,
+     "n": 513
+    },
+    "disagreement_skipped": {
+     "value": 0.01949317738791423,
+     "lo": 0.010622109597876371,
+     "hi": 0.0355070435762798,
+     "n": 513
+    },
+    "cheap_wrong": 17,
+    "disagree": 10,
+    "shared_errors": 8,
+    "caught_errors": 9,
+    "both_wrong_differ": 0,
+    "false_alarms": 1,
+    "final_error_all": {
+     "value": 0.05138888888888889,
+     "lo": 0.037510032859275386,
+     "hi": 0.07002934316308722,
+     "n": 720
+    },
+    "final_error_skipped": {
+     "value": 0.017543859649122806,
+     "lo": 0.00925680087227559,
+     "hi": 0.033002693694067824,
+     "n": 513
+    },
+    "cheap_error_all": {
+     "value": 0.11388888888888889,
+     "lo": 0.09270491192605484,
+     "hi": 0.1391710835359167,
+     "n": 720
+    }
+   },
+   "humanities": {
+    "threshold": 0.88,
+    "n_tasks": 360,
+    "n_skipped": 122,
+    "skip_rate": 0.3388888888888889,
+    "cheap_error_skipped": {
+     "value": 0.12295081967213115,
+     "lo": 0.07594373143728067,
+     "hi": 0.1929776489872208,
+     "n": 122
+    },
+    "disagreement_skipped": {
+     "value": 0.09836065573770492,
+     "lo": 0.05716502073361096,
+     "hi": 0.1640773192837928,
+     "n": 122
+    },
+    "cheap_wrong": 15,
+    "disagree": 12,
+    "shared_errors": 5,
+    "caught_errors": 10,
+    "both_wrong_differ": 0,
+    "false_alarms": 2,
+    "final_error_all": {
+     "value": 0.14722222222222223,
+     "lo": 0.11434886147103329,
+     "hi": 0.18754487866710046,
+     "n": 360
+    },
+    "final_error_skipped": {
+     "value": 0.05737704918032787,
+     "lo": 0.02806844241353642,
+     "hi": 0.11370883025870449,
+     "n": 122
+    },
+    "cheap_error_all": {
+     "value": 0.3055555555555556,
+     "lo": 0.26023190232252474,
+     "hi": 0.3549851198008562,
+     "n": 360
+    }
+   },
+   "humanities_audit": {
+    "threshold": 0.88,
+    "seeds": 1000,
+    "tolerance": 0.05,
+    "true_error": 0.12295081967213115,
+    "true_disagreement": 0.09836065573770492,
+    "audits_mean": 41.03,
+    "estimate_mean": 0.10004379101131937,
+    "coverage_of_disagreement": 1.0,
+    "coverage_of_error": 0.995,
+    "upper_median": 0.2525914295598519,
+    "status": {
+     "breach": 0.106,
+     "inconclusive": 0.894
+    }
+   }
+  }
+ },
+ "sonnet": {
+  "truth": {
+   "threshold": 0.8,
+   "n_tasks": 1680,
+   "n_skipped": 1344,
+   "skip_rate": 0.8,
+   "cheap_error_skipped": {
+    "value": 0.09300595238095238,
+    "lo": 0.07861707299295338,
+    "hi": 0.10971476467198606,
+    "n": 1344
+   },
+   "disagreement_skipped": {
+    "value": 0.044642857142857144,
+    "lo": 0.03483931397068388,
+    "hi": 0.057042010802520776,
+    "n": 1344
+   },
+   "cheap_wrong": 125,
+   "disagree": 60,
+   "shared_errors": 76,
+   "caught_errors": 46,
+   "both_wrong_differ": 3,
+   "false_alarms": 11,
+   "final_error_all": {
+    "value": 0.11726190476190476,
+    "lo": 0.10274318428832423,
+    "hi": 0.13352695666623385,
+    "n": 1680
+   },
+   "final_error_skipped": {
+    "value": 0.06696428571428571,
+    "lo": 0.05479710938511688,
+    "hi": 0.08159983672273459,
+    "n": 1344
+   },
+   "cheap_error_all": {
+    "value": 0.16964285714285715,
+    "lo": 0.1524540946089383,
+    "hi": 0.1883389508495061,
+    "n": 1680
+   }
+  },
+  "auroc": {
+   "n": 1680,
+   "cheap_correct": 0.819208954285355,
+   "agrees_with_final": 0.8580672749016143
+  },
+  "coverage": {
+   "threshold": 0.8,
+   "seeds": 1000,
+   "tolerance": 0.05,
+   "true_error": 0.09300595238095238,
+   "true_disagreement": 0.044642857142857144,
+   "audits_mean": 455.147,
+   "estimate_mean": 0.04442498291929735,
+   "coverage_of_disagreement": 0.998,
+   "coverage_of_error": 0.007,
+   "upper_median": 0.07058282618991507,
+   "status": {
+    "inconclusive": 0.99,
+    "ok": 0.01
+   }
+  },
+  "serve_audit": {
+   "n_skipped": 1344,
+   "n_audited": 471,
+   "disagreement_weighted": {
+    "value": 0.04070175438596491,
+    "lo": 0.023298695026260585,
+    "hi": 0.0655436353092882,
+    "n": 471,
+    "n_eff": 385.6837606837607
+   },
+   "audit_only_status": "inconclusive",
+   "skipped_error_ref": {
+    "value": 0.09300595238095238,
+    "lo": 0.07861707299295338,
+    "hi": 0.10971476467198606,
+    "n": 1344
+   },
+   "reference_status": "breach",
+   "final_tier_error_on_audits": {
+    "value": 0.06456140350877193,
+    "lo": 0.04217283845863973,
+    "hi": 0.09390120570436311,
+    "n": 471
+   }
+  },
+  "cost": {
+   "cheap_only_per_task": 0.0005792852380952381,
+   "final_only_per_task": 0.00881410761904762,
+   "serving_per_task": 0.0027099536309523812,
+   "audit_per_task": 0.0024544383333333334,
+   "all_in_per_task": 0.005164391964285715,
+   "saving_serving_only": 0.6925436189256335,
+   "saving_all_in": 0.4140765931737357,
+   "audit_overhead": 0.9057122990221608
+  },
+  "drift": {
+   "target": 0.05,
+   "threshold": 0.88,
+   "stem": {
+    "threshold": 0.88,
+    "n_tasks": 720,
+    "n_skipped": 513,
+    "skip_rate": 0.7125,
+    "cheap_error_skipped": {
+     "value": 0.03313840155945419,
+     "lo": 0.02079123739006849,
+     "hi": 0.05242552603877695,
+     "n": 513
+    },
+    "disagreement_skipped": {
+     "value": 0.009746588693957114,
+     "lo": 0.004170143179228069,
+     "hi": 0.022610716955864328,
+     "n": 513
+    },
+    "cheap_wrong": 17,
+    "disagree": 5,
+    "shared_errors": 13,
+    "caught_errors": 4,
+    "both_wrong_differ": 0,
+    "false_alarms": 1,
+    "final_error_all": {
+     "value": 0.0763888888888889,
+     "lo": 0.05915662967544249,
+     "hi": 0.09811739412276371,
+     "n": 720
+    },
+    "final_error_skipped": {
+     "value": 0.02729044834307992,
+     "lo": 0.016324707188284916,
+     "hi": 0.04528308041712227,
+     "n": 513
+    },
+    "cheap_error_all": {
+     "value": 0.11388888888888889,
+     "lo": 0.09270491192605484,
+     "hi": 0.1391710835359167,
+     "n": 720
+    }
+   },
+   "humanities": {
+    "threshold": 0.88,
+    "n_tasks": 360,
+    "n_skipped": 122,
+    "skip_rate": 0.3388888888888889,
+    "cheap_error_skipped": {
+     "value": 0.12295081967213115,
+     "lo": 0.07594373143728067,
+     "hi": 0.1929776489872208,
+     "n": 122
+    },
+    "disagreement_skipped": {
+     "value": 0.09016393442622951,
+     "lo": 0.051092543842606385,
+     "hi": 0.15425678270576482,
+     "n": 122
+    },
+    "cheap_wrong": 15,
+    "disagree": 11,
+    "shared_errors": 6,
+    "caught_errors": 8,
+    "both_wrong_differ": 1,
+    "false_alarms": 2,
+    "final_error_all": {
+     "value": 0.18611111111111112,
+     "lo": 0.14929722740758675,
+     "hi": 0.2295531083058708,
+     "n": 360
+    },
+    "final_error_skipped": {
+     "value": 0.07377049180327869,
+     "lo": 0.03929380553323201,
+     "hi": 0.13426949407707403,
+     "n": 122
+    },
+    "cheap_error_all": {
+     "value": 0.3055555555555556,
+     "lo": 0.26023190232252474,
+     "hi": 0.3549851198008562,
+     "n": 360
+    }
+   },
+   "humanities_audit": {
+    "threshold": 0.88,
+    "seeds": 1000,
+    "tolerance": 0.05,
+    "true_error": 0.12295081967213115,
+    "true_disagreement": 0.09016393442622951,
+    "audits_mean": 40.97,
+    "estimate_mean": 0.09175369205719539,
+    "coverage_of_disagreement": 1.0,
+    "coverage_of_error": 0.993,
+    "upper_median": 0.2429702463512755,
+    "status": {
+     "breach": 0.078,
+     "inconclusive": 0.922
+    }
+   }
+  }
+ }
+}

@@ -157,42 +157,41 @@ trade-offs. Everything the CLI does is also available from the
 
 ## Results
 
-One real run: Claude Haiku 5.5 as the fast tier, Claude Opus 5.5 as the final tier, verbal
-confidence, 200 generated multi-step arithmetic problems with reference answers. Run through the
-Claude Code CLI with Haiku at effort `low`; costs are list-price estimates, not billed amounts.
+Main run (2026-10-10): Claude Haiku 5.5 (effort `low`, verbal confidence, threshold 0.80) in front
+of Claude Opus 5.5 or Claude Sonnet 5.5 on 1680 MMLU-Pro questions (120 per subject) and 520
+BIG-Bench Hard examples. Both have gold answers graded by exact match. Every tier answered every
+task, so the cheap tier's true error on the cases it served alone is known. Run through the
+Claude Code CLI for $58 of list-price calls.
 
-| Policy | Accuracy (95% CI) | Cost per task |
+| MMLU-Pro | Haiku -> Opus | Haiku -> Sonnet |
 |---|---|---|
-| Haiku only | 95.0% (91.0-97.3) | $0.00047 |
-| Opus only | 100.0% (98.1-100.0) | $0.0115 |
-| Cascade, threshold 0.80, serving only | 98.5% (95.7-99.5) | $0.0016 |
-| Cascade, threshold 0.80, serving + audit | 98.5% (95.7-99.5) | $0.0046 |
-| Oracle router (cost lower bound) | 100.0% | $0.0010 |
+| Accuracy: Haiku only / final tier only / cascade | 83.0% / 91.2% / 88.1% | 83.0% / 88.3% / 86.2% |
+| Served by Haiku alone | 80.0% | 80.0% |
+| Haiku error on those, vs gold | 9.3% (7.9-11.0) | 9.3% (7.9-11.0) |
+| Haiku disagreement with the final tier on those | 6.1% (4.9-7.5) | 4.5% (3.5-5.7) |
+| Audit-only estimate (~465 weighted audits) | 5.1% (3.1-7.8) | 4.1% (2.3-6.6) |
+| Haiku errors the final tier shared (audit cannot see them) | 44% | 61% |
+| Saving vs final tier alone: serving / with audit | 72% / 45% | 69% / 41% |
 
-The serve run spent $0.31 on serving and $0.60 on shadow audits (audit overhead 192%; the audit
-rates were set high so 200 tasks give a usable sample). Serving alone costs 86% less than Opus
-alone; all-in, with the audit, the saving is 60%.
+The audit estimates disagreement accurately: re-drawn 1000 times offline, its interval covered
+the true disagreement rate 99.7-99.8% of the time. It covered the gold-graded error only 41.6%
+(Opus) and 0.7% (Sonnet) of the time, because the final tier repeats many of Haiku's mistakes. A
+weaker final tier repeats more of them and makes the cheap tier look better. On BBH, the Haiku ->
+Sonnet audit reported `ok` against a 5% tolerance (0.8%, upper bound 4.8%) while the gold-graded
+error was 5.4% (3.7-7.8).
 
-Haiku answered 181 of 200 tasks without escalating. Two statuses against a 5% tolerance:
+Part of that gap is label noise, not missed errors. In 13 hand-checked MMLU-Pro cases where both
+models gave the same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous, and 2 were real
+errors. Read the audit as disagreement with a final tier that is itself wrong 9-12% of the time
+on MMLU-Pro. Do not read it as error.
 
-| Skipped-case rate | Based on | Estimate (95% CI) | Status |
-|---|---|---|---|
-| Error vs references | all 181 skipped cases, graded | 1.7% (0.6-4.8) | ok |
-| Disagreement with Opus (audit only) | 51 audited cases, weighted | 2.5% (0.1-12.7) | inconclusive |
+A drift check (offline): a threshold tuned on STEM questions (0.88, 3.3% error) gave 12.3% error
+on the humanities questions Haiku served alone. At that volume (~41 audits) the audit never said
+`ok`, but it confirmed the breach in only 8-11% of re-draws.
 
-The `ok` comes from grading every skipped case against its reference, which production traffic
-does not allow. The audit by itself, which is what shadowgate reports when there are no
-references, is inconclusive at this sample size. The errors sit near the threshold: Opus disagreed
-with 2 of 15 audited answers in the [0.80, 0.90) bin (13.3%, 95% CI 1.7-40.5%), against 0 of 36
-above 0.90.
-
-Main limitation: Opus answered all 200 tasks correctly, so on this dataset disagreement with Opus
-equals error by construction. The run does not test the case the audit exists for, a final tier
-that is itself sometimes wrong. Costs are Claude Code CLI list-price estimates, dominated by CLI
-prompt overhead; see [docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#limitations).
-
-Setup, per-bin tables and caveats: [docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md). Full report:
-[arithmetic-haiku-opus.html](https://h-a-forster.github.io/shadowgate/results/arithmetic-haiku-opus.html).
+An earlier run on generated arithmetic, where Opus was 100% correct, is also in the results
+document. Setup, BBH numbers, coverage, drift and limitations:
+[docs/results.md](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md).
 
 ## Documentation
 
@@ -201,13 +200,14 @@ Setup, per-bin tables and caveats: [docs/results.md](https://github.com/h-a-fors
 - [Configuration](https://github.com/h-a-forster/shadowgate/blob/main/docs/configuration.md): every TOML key.
 - [CLI](https://github.com/h-a-forster/shadowgate/blob/main/docs/cli.md): every command, option and exit code.
 - [Examples](https://github.com/h-a-forster/shadowgate/blob/main/examples/README.md): configs for each backend.
-- [Results](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md): the Haiku 5.5 -> Opus 5.5 experiment and how to reproduce it.
+- [Results](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md): the MMLU-Pro, BIG-Bench Hard and arithmetic experiments and how to reproduce them.
 - [Design](https://github.com/h-a-forster/shadowgate/blob/main/docs/design.md): architecture and module contracts.
 
 ## Limitations
 
 - Disagreement with the final tier is not error unless tasks carry references; a mistake both
-  tiers make is invisible to the audit.
+  tiers make is invisible to the audit. On MMLU-Pro, 44-61% of the cheap tier's errors against
+  gold labels were shared with the final tier (some of them label noise).
 - Costs are estimates from a built-in price table or your `pricing` override. Claude Code CLI
   costs on a subscription are notional.
 - A threshold chosen on an eval set holds for tasks like that set. The serve-mode audit is how
