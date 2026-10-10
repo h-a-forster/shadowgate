@@ -8,7 +8,8 @@ answers; the gpt-4o predictions in that file are ignored).
 Question 3983 is dropped: its ``answer`` (C) and ``answer_index`` (1) disagree.
 
     git clone --depth 1 https://github.com/TIGER-AI-Lab/MMLU-Pro /tmp/MMLU-Pro
-    python make_tasks.py /tmp/MMLU-Pro -n 280 --seed 2026 -o tasks.jsonl
+    python make_tasks.py /tmp/MMLU-Pro -n 20 --seed 1 -o pilot-tasks.jsonl
+    python make_tasks.py /tmp/MMLU-Pro -n 1680 --seed 2026 --skip pilot-tasks.jsonl -o tasks.jsonl
 
 Sampling: equal counts per subject (14 subjects; when n is not a multiple of 14, a seeded
 choice of subjects gets one extra), drawn with ``random.Random(seed)`` from the

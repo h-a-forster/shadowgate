@@ -11,8 +11,9 @@ directory (written by its ``run.sh``) and prints, per pair:
   interval and status, next to the reference-graded rate;
 * serving, audit and all-in cost against the final tier alone;
 * AUROC of the cheap tier's verbal confidence;
-* an offline coverage check: the serve-mode audit re-drawn over many seeds with references
-  stripped, scoring the interval against the true disagreement rate and the true error rate;
+* an offline coverage check: the serve-mode audit re-drawn over many seeds (default 5000) with
+  references stripped, scoring the interval against the true disagreement rate and the true
+  error rate, with Monte Carlo standard errors (``mc_se``) for each simulated proportion;
 * a drift check: the threshold is picked on STEM subjects and applied to humanities.
 
 No model calls. ``--json`` writes every number to a file.
@@ -128,7 +129,11 @@ def attempt_cost(d: Decision, i: int) -> float:
 
 
 def costs(eval_ds: list[Decision], serve_ds: list[Decision]) -> dict[str, float | None]:
-    """Price-table costs: final tier alone (eval run) vs the serve run's serving and audit."""
+    """Recorded costs: final tier alone (eval run) vs the serve run's serving and audit.
+
+    Each attempt's ``cost_usd`` as recorded: the price table where shadowgate resolved the model
+    (Haiku here), otherwise the CLI's ``total_cost_usd`` (Opus and Sonnet here).
+    """
     n = len(serve_ds)
     final_only = sum(attempt_cost(d, 1) for d in eval_ds) / len(eval_ds)
     cheap_only = sum(attempt_cost(d, 0) for d in eval_ds) / len(eval_ds)
@@ -156,9 +161,9 @@ def serve_audit(serve_ds: list[Decision]) -> dict[str, Any]:
         "audit_only_status": s.audit_only_status or s.status,
         "skipped_error_ref": None if s.skipped_error is None else pct(s.skipped_error),
         "reference_status": s.status if s.status_metric == "skipped_error" else None,
-        "final_tier_error_on_audits": None if s.audit_tier_error is None else pct(
-            s.audit_tier_error
-        ),
+        "final_tier_error_on_audits": None
+        if s.audit_tier_error is None
+        else pct(s.audit_tier_error),
     }
 
 
@@ -207,6 +212,11 @@ def draw(decisions: list[Decision], t: float, rng: random.Random) -> list[Decisi
     return out
 
 
+def mc_se(p: float | None, k: int) -> float | None:
+    """Monte Carlo standard error of a proportion ``p`` estimated from ``k`` simulated draws."""
+    return None if p is None or k == 0 else (p * (1 - p) / k) ** 0.5
+
+
 def coverage(decisions: list[Decision], t: float, seeds: int, tol: float) -> dict[str, Any]:
     tr = truth(decisions, t)
     true_err = tr["cheap_error_skipped"]["value"]
@@ -231,6 +241,8 @@ def coverage(decisions: list[Decision], t: float, seeds: int, tol: float) -> dic
         n_aud.append(s.n_audited)
     k = len(values)
     uppers.sort()
+    cov_dis = cover_dis / k if k else None
+    cov_err = cover_err / k if k else None
     return {
         "threshold": t,
         "seeds": seeds,
@@ -239,10 +251,13 @@ def coverage(decisions: list[Decision], t: float, seeds: int, tol: float) -> dic
         "true_disagreement": true_dis,
         "audits_mean": sum(n_aud) / k if k else None,
         "estimate_mean": sum(values) / k if k else None,
-        "coverage_of_disagreement": cover_dis / k if k else None,
-        "coverage_of_error": cover_err / k if k else None,
+        "coverage_of_disagreement": cov_dis,
+        "coverage_of_disagreement_mc_se": mc_se(cov_dis, k),
+        "coverage_of_error": cov_err,
+        "coverage_of_error_mc_se": mc_se(cov_err, k),
         "upper_median": uppers[k // 2] if k else None,
         "status": {key: v / seeds for key, v in sorted(statuses.items())},
+        "status_mc_se": {key: mc_se(v / seeds, seeds) for key, v in sorted(statuses.items())},
     }
 
 
@@ -294,7 +309,7 @@ def ci(e: dict[str, Any] | None) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("dir", type=Path)
-    ap.add_argument("--seeds", type=int, default=1000)
+    ap.add_argument("--seeds", type=int, default=5000)
     ap.add_argument("--drift-target", type=float, default=TOLERANCE)
     ap.add_argument("--json", type=Path)
     args = ap.parse_args()
@@ -332,38 +347,59 @@ def main() -> None:
         print(f"  final-tier error, all    {ci(tr['final_error_all'])}")
         print(f"  cheap-tier error, all    {ci(tr['cheap_error_all'])}")
         a = res["auroc"]
-        print(f"  AUROC cheap correct      {a['cheap_correct']:.3f}  (agrees with final "
-              f"{a['agrees_with_final']:.3f}, n {a['n']})")
+        print(
+            f"  AUROC cheap correct      {a['cheap_correct']:.3f}  (agrees with final "
+            f"{a['agrees_with_final']:.3f}, n {a['n']})"
+        )
         if "serve_audit" in res:
             sa = res["serve_audit"]
-            print(f"  serve audit              {sa['n_audited']} of {sa['n_skipped']} audited; "
-                  f"weighted disagreement {ci(sa['disagreement_weighted'])}, "
-                  f"audit-only status {sa['audit_only_status']}")
-            print(f"  reference-graded         {ci(sa['skipped_error_ref'])}, "
-                  f"status {sa['reference_status']}")
+            print(
+                f"  serve audit              {sa['n_audited']} of {sa['n_skipped']} audited; "
+                f"weighted disagreement {ci(sa['disagreement_weighted'])}, "
+                f"audit-only status {sa['audit_only_status']}"
+            )
+            print(
+                f"  reference-graded         {ci(sa['skipped_error_ref'])}, "
+                f"status {sa['reference_status']}"
+            )
             c = res["cost"]
-            print(f"  cost/task (table)        final only ${c['final_only_per_task']:.5f}; "
-                  f"serving ${c['serving_per_task']:.5f} + audit ${c['audit_per_task']:.5f}"
-                  f" = ${c['all_in_per_task']:.5f}")
-            print(f"  saving vs final only     serving {f(c['saving_serving_only'])}, "
-                  f"all-in {f(c['saving_all_in'])}")
+            print(
+                f"  cost/task (recorded)      final only ${c['final_only_per_task']:.5f}; "
+                f"serving ${c['serving_per_task']:.5f} + audit ${c['audit_per_task']:.5f}"
+                f" = ${c['all_in_per_task']:.5f}"
+            )
+            print(
+                f"  saving vs final only     serving {f(c['saving_serving_only'])}, "
+                f"all-in {f(c['saving_all_in'])}"
+            )
         cv = res["coverage"]
-        print(f"  coverage ({cv['seeds']} seeds)    mean est {f(cv['estimate_mean'], 2)}, "
-              f"audits {cv['audits_mean']:.1f}; covers disagreement "
-              f"{f(cv['coverage_of_disagreement'])}, covers error "
-              f"{f(cv['coverage_of_error'])}; status {cv['status']}")
+        print(
+            f"  coverage ({cv['seeds']} seeds)    mean est {f(cv['estimate_mean'], 2)}, "
+            f"audits {cv['audits_mean']:.1f}; covers disagreement "
+            f"{f(cv['coverage_of_disagreement'])} (MC SE "
+            f"{f(cv['coverage_of_disagreement_mc_se'], 2)}), covers error "
+            f"{f(cv['coverage_of_error'])} (MC SE {f(cv['coverage_of_error_mc_se'], 2)}); "
+            f"status {cv['status']}"
+        )
         if "drift" in res:
             dr = res["drift"]
             if dr["threshold"] is None:
                 print(f"  drift                    {dr['note']}")
             else:
                 st, hu, ha = dr["stem"], dr["humanities"], dr["humanities_audit"]
-                print(f"  drift: threshold {dr['threshold']} picked on STEM "
-                      f"(error {ci(st['cheap_error_skipped'])}, skip {f(st['skip_rate'])})")
-                print(f"    humanities: error {ci(hu['cheap_error_skipped'])}, disagreement "
-                      f"{ci(hu['disagreement_skipped'])}, skip {f(hu['skip_rate'])}")
-                print(f"    humanities audit sim: mean est {f(ha['estimate_mean'], 2)}, "
-                      f"covers error {f(ha['coverage_of_error'])}, status {ha['status']}")
+                print(
+                    f"  drift: threshold {dr['threshold']} picked on STEM "
+                    f"(error {ci(st['cheap_error_skipped'])}, skip {f(st['skip_rate'])})"
+                )
+                print(
+                    f"    humanities: error {ci(hu['cheap_error_skipped'])}, disagreement "
+                    f"{ci(hu['disagreement_skipped'])}, skip {f(hu['skip_rate'])}"
+                )
+                print(
+                    f"    humanities audit sim: mean est {f(ha['estimate_mean'], 2)}, "
+                    f"covers error {f(ha['coverage_of_error'])}, status {ha['status']} "
+                    f"(MC SE {ha['status_mc_se']})"
+                )
         print()
 
     if args.json:

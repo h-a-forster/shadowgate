@@ -161,7 +161,7 @@ Main run (2026-10-10): Claude Haiku 5.5 (effort `low`, verbal confidence, thresh
 of Claude Opus 5.5 or Claude Sonnet 5.5 on 1680 MMLU-Pro questions (120 per subject) and 520
 BIG-Bench Hard examples. Both have gold answers graded by exact match. Every tier answered every
 task, so the cheap tier's true error on the cases it served alone is known. Run through the
-Claude Code CLI for $58 of list-price calls.
+Claude Code CLI for $58 of CLI-reported cost.
 
 | MMLU-Pro | Haiku -> Opus | Haiku -> Sonnet |
 |---|---|---|
@@ -173,16 +173,23 @@ Claude Code CLI for $58 of list-price calls.
 | Haiku errors the final tier shared (audit cannot see them) | 44% | 61% |
 | Saving vs final tier alone: serving / with audit | 72% / 45% | 69% / 41% |
 
-The audit estimates disagreement accurately: re-drawn 1000 times offline, its interval covered
-the true disagreement rate 99.7-99.8% of the time. It covered the gold-graded error only 41.6%
-(Opus) and 0.7% (Sonnet) of the time, because the final tier repeats many of Haiku's mistakes. A
-weaker final tier repeats more of them and makes the cheap tier look better. On BBH, the Haiku ->
-Sonnet audit reported `ok` against a 5% tolerance (0.8%, upper bound 4.8%) while the gold-graded
-error was 5.4% (3.7-7.8).
+Haiku answers are shared across the two pairs (one response cache), so the Opus and Sonnet
+columns are paired comparisons, not independent replications.
 
-Part of that gap is label noise, not missed errors. In 13 hand-checked MMLU-Pro cases where both
-models gave the same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous, and 2 were real
-errors. Read the audit as disagreement with a final tier that is itself wrong 9-12% of the time
+The audit tracks disagreement, conservatively: re-drawn 5000 times offline, its interval covered
+the true disagreement rate 99.8-99.9% of the time, above the 95% nominal level, partly because the
+interval ignores the finite-population correction with about a third of skipped cases audited. It
+covered the gold-graded error only 38.6% (Opus) and 0.8% (Sonnet) of the time, because the final
+tier repeats many of Haiku's mistakes. A weaker final tier repeats more of them and makes the
+cheap tier look better. On BBH, the Haiku ->
+Sonnet audit reported `ok` against a 5% tolerance (0.8%, upper bound 4.8%) while the gold-graded
+error was 5.4% (3.7-7.8). That `ok` was mostly a lucky draw (1.4% of re-draws); the lasting point
+is that the audit cannot see errors the final tier shares.
+
+Some of that gap is probably label noise. In 13 hand-checked MMLU-Pro cases (drawn with two ad hoc
+seeds) where both models gave the same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous,
+and 2 were real errors. That shows label noise exists, not how large it is, and noisy labels cut
+both ways. Read the audit as disagreement with a final tier that is itself wrong 9-12% of the time
 on MMLU-Pro. Do not read it as error.
 
 A drift check (offline): a threshold tuned on STEM questions (0.88, 3.3% error) gave 12.3% error

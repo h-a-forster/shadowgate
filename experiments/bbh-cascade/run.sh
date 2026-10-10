@@ -4,7 +4,7 @@
 # github.com/suzgunmirac/BIG-Bench-Hard (see make_tasks.py). Every CLI call goes through
 # claude-budget (../mmlu-pro-cascade/claude_budget.py), which logs the CLI's reported cost to
 # ../mmlu-pro-cascade/costs.jsonl and refuses calls past SHADOWGATE_BUDGET_USD (default 88).
-# Eval runs make ~1560 calls (~$11 at list prices); serve runs are response-cache hits.
+# Eval runs make ~1560 calls (~$12 CLI-reported); serve runs are response-cache hits.
 set -eu
 cd "$(dirname "$0")"
 BBH=${BBH:-/tmp/BIG-Bench-Hard}

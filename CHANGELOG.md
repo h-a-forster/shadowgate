@@ -17,8 +17,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - MMLU-Pro (1680 questions) and BIG-Bench Hard (520 examples) experiments with Haiku -> Opus and
   Haiku -> Sonnet through the Claude Code CLI, in `experiments/mmlu-pro-cascade/` and
   `experiments/bbh-cascade/`: raw decisions, configs, task builders, a budget guard around the
-  CLI, and `experiments/analyze_cascade.py` (error vs disagreement, coverage over 1000 seeds,
-  drift check).
+  CLI, and `experiments/analyze_cascade.py` (error vs disagreement, coverage over 5000 seeds
+  with Monte Carlo standard errors, drift check).
 
 ### Changed
 
@@ -26,6 +26,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published run (final tier 100% correct, CLI cost overhead, cached serve-run audits).
 - docs/results.md and the README lead with the MMLU-Pro and BBH results, where the final tier
   is often wrong and the audit's disagreement estimate falls below the gold-graded error.
+- Results wording: coverage figures re-run with 5000 seeds and reported with Monte Carlo standard
+  errors; the audit interval is described as conservative (finite-population correction ignored)
+  and the Hajek estimator as approximately unbiased; the label-noise argument is softened; Haiku
+  answers shared across pairs are disclosed; cost sources are stated consistently. Also:
+  `make_tasks.py` docstring and `run.sh` now match the committed pilot files.
 
 ## [0.1.0] - 2026-10-10
 

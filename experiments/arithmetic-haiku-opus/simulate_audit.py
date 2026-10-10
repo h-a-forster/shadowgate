@@ -4,9 +4,11 @@ The eval run called Opus on every task, so every skipped case's disagreement wit
 This script re-draws the serve-mode audit sample many times with the same design (inclusion
 probability 0.5 for confidence in [0.80, 0.95), 0.2 for [0.95, 1.00]), strips the references so
 the status is driven by the audit alone, and checks how often the weighted interval covers the
-true skipped-case rate (the reference-graded error over all skipped cases). No model calls.
+true skipped-case rate (the reference-graded error over all skipped cases). Each simulated
+proportion is printed with its Monte Carlo standard error, sqrt(p (1 - p) / seeds). No model
+calls.
 
-    uv run python experiments/arithmetic-haiku-opus/simulate_audit.py [--seeds 1000]
+    uv run python experiments/arithmetic-haiku-opus/simulate_audit.py [--seeds 5000]
 """
 
 from __future__ import annotations
@@ -55,7 +57,7 @@ def draw(decisions: list[Decision], rng: random.Random) -> list[Decision]:
         fast, final = d.attempts
         assert fast.confidence is not None and fast.confidence.score is not None
         pi = inclusion_prob(fast.confidence.score)
-        audit_cost = 0.0
+        audit_cost: float | None = 0.0
         if rng.random() < pi:
             shadow = ShadowResult("opus", pi, "done", attempt=final, agreement=fast.agreement)
             audit_cost = final.completion.cost_usd if final.completion else None
@@ -70,7 +72,7 @@ def draw(decisions: list[Decision], rng: random.Random) -> list[Decision]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--seeds", type=int, default=1000)
+    ap.add_argument("--seeds", type=int, default=5000)
     args = ap.parse_args()
 
     decisions = load_eval()
@@ -100,19 +102,24 @@ def main() -> None:
         n_audits.append(s.n_audited)
 
     n = args.seeds
+
+    def se(k: int) -> str:
+        p = k / n
+        return f"{p:.3f} (MC SE {(p * (1 - p) / n) ** 0.5:.3f})"
+
     print(f"skipped cases: {graded.n_skipped}, true rate (vs reference): {true_rate:.4f}")
     print(
         f"seeds: {n}, audits per draw: mean {sum(n_audits) / n:.1f}, "
         f"min {min(n_audits)}, max {max(n_audits)}"
     )
     print(
-        f"coverage of the 95% interval: {covered / n:.3f} "
+        f"coverage of the 95% interval: {se(covered)} "
         f"(true rate below interval {below / n:.3f}, above {above / n:.3f})"
     )
     uppers.sort()
     print(
         f"point estimate: mean {sum(values) / n:.4f}, zero disagreements in "
-        f"{sum(1 for v in values if v == 0) / n:.3f} of draws"
+        f"{se(sum(1 for v in values if v == 0))} of draws"
     )
     print(
         f"upper bound: median {uppers[n // 2]:.4f}, 5th-95th percentile "
@@ -120,7 +127,7 @@ def main() -> None:
     )
     print(
         f"status vs {TOLERANCE:.0%} tolerance: "
-        + ", ".join(f"{k} {v / n:.3f}" for k, v in sorted(statuses.items()))
+        + ", ".join(f"{k} {se(v)}" for k, v in sorted(statuses.items()))
     )
 
 

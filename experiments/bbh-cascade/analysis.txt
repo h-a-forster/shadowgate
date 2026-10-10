@@ -8,9 +8,9 @@
   AUROC cheap correct      0.836  (agrees with final 0.859, n 520)
   serve audit              127 of 466 audited; weighted disagreement 2.7% (0.5%-7.6%), audit-only status inconclusive
   reference-graded         5.4% (3.7%-7.8%), status inconclusive
-  cost/task (table)        final only $0.01424; serving $0.00204 + audit $0.00346 = $0.00551
+  cost/task (recorded)      final only $0.01424; serving $0.00204 + audit $0.00346 = $0.00551
   saving vs final only     serving 85.6%, all-in 61.3%
-  coverage (1000 seeds)    mean est 3.27%, audits 122.3; covers disagreement 99.9%, covers error 98.6%; status {'inconclusive': 0.994, 'ok': 0.006}
+  coverage (5000 seeds)    mean est 3.24%, audits 122.1; covers disagreement 99.9% (MC SE 0.03%), covers error 98.4% (MC SE 0.18%); status {'inconclusive': 0.9942, 'ok': 0.0058}
 
 == haiku -> sonnet  (520 tasks, threshold 0.8)
   skipped cases            466 (89.6%)
@@ -22,7 +22,7 @@
   AUROC cheap correct      0.836  (agrees with final 0.860, n 520)
   serve audit              122 of 466 audited; weighted disagreement 0.8% (0.0%-4.8%), audit-only status ok
   reference-graded         5.4% (3.7%-7.8%), status inconclusive
-  cost/task (table)        final only $0.00733; serving $0.00129 + audit $0.00171 = $0.00299
+  cost/task (recorded)      final only $0.00733; serving $0.00129 + audit $0.00171 = $0.00299
   saving vs final only     serving 82.5%, all-in 59.1%
-  coverage (1000 seeds)    mean est 2.85%, audits 122.1; covers disagreement 100.0%, covers error 96.3%; status {'inconclusive': 0.984, 'ok': 0.016}
+  coverage (5000 seeds)    mean est 2.80%, audits 122.1; covers disagreement 100.0% (MC SE 0.00%), covers error 97.1% (MC SE 0.24%); status {'inconclusive': 0.9858, 'ok': 0.0142}
 

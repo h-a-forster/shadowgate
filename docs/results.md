@@ -28,6 +28,7 @@ and [`experiments/bbh-cascade/`](../experiments/bbh-cascade/). Analysis:
 | Prompt | Question and options, then "Think step by step, keeping the reasoning brief", then a final `ANSWER:` line |
 | Eval run | Every tier answers every task, so the cheap tier's error and its disagreement with the final tier are known for every skipped case |
 | Serve run | Normal routing plus inline audits: inclusion probability 0.5 for confidence in [0.80, 0.95), 0.2 for [0.95, 1.00]; tolerance 5%. Every call is a response-cache hit from the eval run, so it costs nothing extra and sees the same answers |
+| Haiku reuse | Haiku runs once per task. Both pair configs share one ledger and response cache, so the Haiku -> Sonnet runs reuse the Haiku answers from the Haiku -> Opus runs (every Haiku answer is identical across the two pairs; all Sonnet-run Haiku calls are cache hits). The Opus and Sonnet columns are therefore paired comparisons on the same Haiku answers, not independent replications. |
 | Backend | Claude Code CLI 2.1.296 (`claude -p`), model aliases `haiku`, `sonnet`, `opus` |
 | Spend | $58.06 in CLI-reported `total_cost_usd` over 6,656 calls, including the pilot (budget $90; [`claude_budget.py`](../experiments/mmlu-pro-cascade/claude_budget.py) logged every call and would have refused calls past $88) |
 
@@ -48,7 +49,8 @@ dropped because its `answer` and `answer_index` fields disagree.
 | Haiku -> Opus, threshold 0.80 | 88.1% (86.5-89.6) | $0.0049 + $0.0048 audit | 93.5% (91.0-95.3) | $0.0020 + $0.0035 audit |
 
 Accuracy is against gold labels, with 95% Wilson intervals. Haiku served 80.0% of MMLU-Pro tasks
-and 89.6% of BBH tasks alone.
+and 89.6% of BBH tasks alone. Costs per task are recorded costs: Opus and Sonnet from the CLI's
+`total_cost_usd`, Haiku from shadowgate's price table (see Limitations).
 
 | Saving against the final tier alone | Serving only | All-in (serving + audit) |
 |---|---|---|
@@ -88,40 +90,56 @@ What this shows:
 - **One audit said `ok` when the gold-graded error was above tolerance.** On BBH, the Haiku ->
   Sonnet audit put disagreement at 0.8% (upper bound 4.8%), status `ok` against 5%. The
   gold-graded error was 5.4% (3.7-7.8). The gold interval contains 5%, so this is not a proven
-  breach, but the audit's `ok` rests on Sonnet sharing Haiku's mistakes.
-- **Much of the gap is label noise.** Thirteen of the 55 MMLU-Pro shared errors (Haiku -> Opus)
-  were drawn at random and read by hand
+  breach. The `ok` itself was mostly a lucky draw: re-drawn 5000 times offline, the audit-only
+  status was `ok` in only 1.4% of draws (Monte Carlo SE 0.2 points). The lasting point is the gap
+  between disagreement (2.8%) and gold-graded error (5.4%). The audit is blind to errors the
+  final tier shares (14 of 25 Haiku errors here), so even a well-sized audit would centre on
+  disagreement, not error.
+- **Some of the gap is probably label noise.** Thirteen of the 55 MMLU-Pro shared errors
+  (Haiku -> Opus) were drawn at random and read by hand
   ([review](../experiments/mmlu-pro-cascade/shared-errors-review.md)): 5 had wrong gold labels,
   6 were ambiguous or had two defensible options, and 2 looked like real errors by both models.
   On BBH the shared errors cluster in tasks with known label problems (`geometric_shapes` 4,
   `date_understanding` 3, `salient_translation_error_detection` 3, `causal_judgement` 2,
   `ruin_names` 1). The two `date_understanding` items checked have wrong gold labels. The
-  gold-graded error is therefore an upper bound. The true error is probably close to the
-  disagreement rate, but this run cannot pin it down.
+  gold-graded error is not shown to be an upper bound on true error. Noisy labels cut both ways:
+  a wrong gold label can also mark a wrong Haiku answer as right, and the hand check only looked
+  at cases graded wrong. The 13 cases come from two ad hoc random seeds (7 and 8) and one
+  reviewer, so they show that label noise exists, not how large it is. True error could lie
+  anywhere from below the disagreement rate to above the gold-graded rate. This run cannot pin it
+  down.
 - **The reference is itself wrong.** Against gold labels, Opus was wrong on 8.8% of MMLU-Pro
   tasks and Sonnet on 11.7%. An audit against such a tier measures agreement with a model that is
   wrong about one time in ten.
 
-### Coverage check (offline, 1000 seeds)
+### Coverage check (offline, 5000 seeds)
 
 As in the earlier run, the serve-mode audit is re-drawn from the eval decisions with references
-stripped (same strata, seeds 0-999). The weighted 95% interval is then scored against both the
+stripped (same strata, seeds 0-4999). The weighted 95% interval is then scored against both the
 true disagreement rate and the gold-graded error rate:
 
 | | MMLU-Pro, Opus | MMLU-Pro, Sonnet | BBH, Opus | BBH, Sonnet |
 |---|---|---|---|---|
 | Audits per draw (mean) | 455 | 455 | 122 | 122 |
-| Mean estimate | 6.12% (true disagreement 6.10%) | 4.44% (4.46%) | 3.27% (3.22%) | 2.85% (2.79%) |
-| Interval covers true disagreement | 99.7% | 99.8% | 99.9% | 100.0% |
-| Interval covers gold-graded error | **41.6%** | **0.7%** | 98.6% | 96.3% |
-| Status vs 5% | inconclusive 93.7%, breach 6.3% | inconclusive 99.0%, ok 1.0% | inconclusive 99.4%, ok 0.6% | inconclusive 98.4%, ok 1.6% |
+| Mean estimate | 6.10% (true disagreement 6.10%) | 4.45% (4.46%) | 3.24% (3.22%) | 2.80% (2.79%) |
+| Interval covers true disagreement | 99.8% (±0.07) | 99.9% (±0.05) | 99.9% (±0.03) | 100.0% (no misses) |
+| Interval covers gold-graded error | **38.6%** (±0.7) | **0.8%** (±0.1) | 98.4% (±0.2) | 97.1% (±0.2) |
+| Status vs 5% | inconclusive 94.5%, breach 5.5% (±0.3) | inconclusive 99.3%, ok 0.7% (±0.1) | inconclusive 99.4%, ok 0.6% (±0.1) | inconclusive 98.6%, ok 1.4% (±0.2) |
 
-The weighted estimator is unbiased for disagreement, and its Korn-Graubard interval is
-conservative (99.7-100% coverage against 95% nominal). As an estimate of error it is biased
-downwards by the shared errors. With ~455 audits on MMLU-Pro the interval is narrow enough to
-exclude the gold-graded error most of the time. With ~122 audits on BBH it is wide enough to
-include it. In all four populations the gold-graded error is above 5%, yet the audit-only status
-was `ok` in 0.6-1.6% of draws in three of them.
+"±" is the Monte Carlo standard error over the 5000 draws; the 1000-seed figures in earlier drafts
+differed by up to 3 points (for example 41.6% for the first error-coverage cell) through seed noise
+alone.
+
+The weighted (Hajek) estimator is only approximately unbiased for disagreement: it is a ratio
+estimator, and its bias is small at these sample sizes (mean estimates within 0.02 points of the
+truth above). Its Korn-Graubard interval over-covers (99.8-100% against 95% nominal). Part of
+that over-coverage comes from the interval ignoring the finite-population correction: the audit
+samples about 34% of the 1344 skipped MMLU-Pro cases (26% of the 466 on BBH) without replacement,
+so the with-replacement variance is too large. The interval is conservative here, not accurate.
+As an estimate of error it is biased downwards by the shared errors. With ~455 audits on MMLU-Pro
+the interval is narrow enough to exclude the gold-graded error most of the time. With ~122 audits
+on BBH it is wide enough to include it. In all four populations the gold-graded error is above
+5%, yet the audit-only status was `ok` in 0.6-1.4% of draws in three of them.
 
 ### Drift check (offline): threshold set on STEM, served on humanities
 
@@ -135,7 +153,7 @@ biology; 720 tasks) is at most 5%. That is 0.88. STEM at 0.88: Haiku serves 71.2
 | Served by Haiku alone | 122 of 360 (33.9%) | 122 of 360 (33.9%) |
 | Haiku error vs gold | 12.3% (7.6-19.3) | 12.3% (7.6-19.3) |
 | Disagreement with final tier | 9.8% (5.7-16.4) | 9.0% (5.1-15.4) |
-| Audit re-drawn 1000 times (~41 audits each) | mean 10.0%; breach 10.6%, inconclusive 89.4% | mean 9.2%; breach 7.8%, inconclusive 92.2% |
+| Audit re-drawn 5000 times (~41 audits each) | mean 9.9%; breach 10.8% (±0.4), inconclusive 89.2% | mean 9.1%; breach 8.1% (±0.4), inconclusive 91.9% |
 
 Haiku's confidence drops on humanities, so it serves fewer of them, but the ones it keeps are wrong
 nearly four times as often as on STEM. The audit never reported `ok` on this shifted traffic. At
@@ -145,19 +163,22 @@ was about 25%. Catching drift of this size needs a few hundred audits on the shi
 ### Limitations
 
 - **Gold labels are noisy.** Both benchmarks have wrong and ambiguous labels (see above). Error
-  "against gold" overstates true error, and how much is only estimated from 13 hand-checked
-  cases.
+  "against gold" may overstate or understate true error. The 13 hand-checked cases (two ad hoc
+  seeds, one reviewer) do not estimate the size or sign of the bias.
+- **The two pairs are not independent.** Haiku-side quantities (Haiku error on skipped cases,
+  AUROC, skip rate) are identical across pairs by construction, so they are not two confirmations.
 - **One run, one prompt, one threshold.** Haiku runs at effort `low`; the final tiers at default
   effort. Different prompts or efforts change every number.
 - **Serve-run audits are cache hits.** Each audit replays the eval run's final-tier answer, so
-  the final tier's run-to-run variance is not measured. The serve run costs are list-price
-  figures for those cached answers.
+  the final tier's run-to-run variance is not measured. The serve run's costs are the
+  recorded costs of those cached answers.
 - **Costs.** Opus and Sonnet costs are the CLI's own `total_cost_usd`: the CLI reported more than
   one model in `modelUsage` for those calls, so shadowgate kept the alias as the model name and
-  used the CLI's figure. Haiku costs come from shadowgate's price table, which came to $1.23
-  against the CLI's $1.66 for the same calls. At the CLI's Haiku price the savings above are
-  1-2.3 points lower. All figures include the Claude Code CLI's prompt overhead (1,200 or more
-  cache-write tokens per call) and are notional on a subscription.
+  used the CLI's figure. Haiku costs come from shadowgate's price table: $1.23 for all
+  Haiku calls (MMLU-Pro, BBH and pilot), against the $1.66 the CLI reported for them. At the
+  CLI's Haiku price the savings above are 1.1-2.3 points lower. All figures include the Claude
+  Code CLI's prompt overhead (1,200 or more cache-write tokens per call) and are notional on a
+  subscription.
 - **Drift check.** The drift result uses 360 humanities tasks and 122 skipped cases, so its
   intervals are wide.
 - **Latency is not reported.** Each call starts a CLI process, which dominates the timing.
@@ -167,8 +188,8 @@ was about 25%. Catching drift of this size needs a few hundred audits on the shi
 ```sh
 git clone --depth 1 https://github.com/TIGER-AI-Lab/MMLU-Pro /tmp/MMLU-Pro
 git clone --depth 1 https://github.com/suzgunmirac/BIG-Bench-Hard /tmp/BIG-Bench-Hard
-sh experiments/mmlu-pro-cascade/run.sh   # ~5,000 calls, ~$46 at list prices
-sh experiments/bbh-cascade/run.sh        # ~1,560 calls, ~$11
+sh experiments/mmlu-pro-cascade/run.sh   # ~5,000 calls, ~$47 CLI-reported
+sh experiments/bbh-cascade/run.sh        # ~1,560 calls, ~$12 CLI-reported
 ```
 
 The offline analysis (no model calls) runs from the committed decisions:
@@ -177,6 +198,9 @@ The offline analysis (no model calls) runs from the committed decisions:
 uv run python experiments/analyze_cascade.py experiments/mmlu-pro-cascade
 uv run python experiments/analyze_cascade.py experiments/bbh-cascade
 ```
+
+The analysis defaults to 5000 seeds and takes a few minutes per experiment. Pass `--seeds` to
+change it.
 
 ## Earlier run: Haiku 5.5 -> Opus 5.5 on multi-step arithmetic
 
@@ -257,7 +281,7 @@ of them with Opus.
 
 Because the eval run called Opus on every task, the audit can be re-drawn offline.
 [`simulate_audit.py`](../experiments/arithmetic-haiku-opus/simulate_audit.py) draws the serve-mode
-audit sample 1000 times (seeds 0-999, same strata: inclusion probability 0.5 below confidence 0.95,
+audit sample 5000 times (seeds 0-4999, same strata: inclusion probability 0.5 below confidence 0.95,
 0.2 above), strips the references so only the audit counts, and checks the weighted 95% interval
 against the true skipped-case rate (3 of 181, 1.66%, graded against references). No model calls:
 
@@ -267,17 +291,23 @@ uv run python experiments/arithmetic-haiku-opus/simulate_audit.py
 
 | | |
 |---|---|
-| Audits per draw | mean 58.3 (40-80) |
-| Mean point estimate | 1.69% (true 1.66%) |
-| Interval covers the true rate | 1000 of 1000 draws (100.0%) |
-| Draws with no disagreement observed | 11.0% |
-| Upper bound | median 10.3%, 5th-95th percentile 7.7-13.5% |
-| Status vs 5% tolerance | inconclusive in 1000 of 1000 draws |
+| Audits per draw | mean 58.4 (39-82) |
+| Mean point estimate | 1.67% (true 1.66%) |
+| Interval covers the true rate | 5000 of 5000 draws (100.0%) |
+| Draws with no disagreement observed | 12.7% (Monte Carlo SE 0.5); exact value 12.5% |
+| Upper bound | median 10.3%, 5th-95th percentile 7.4-13.6% |
+| Status vs 5% tolerance | inconclusive in 5000 of 5000 draws |
 
-The weighted estimate is unbiased here and the Korn-Graubard interval is conservative (it never
-missed, against 95% nominal). The cost is width: at this audit size the upper bound never fell
-below 5%, so the audit alone could not have confirmed the tolerance on any draw. This checks one
-population with three errors; it is not a general coverage result.
+The exact no-disagreement share follows from the design: all three disagreements sit in the 0.5
+stratum (confidence 0.80, 0.85, 0.93), so no audit sees any of them with probability
+0.5^3 = 12.5%. An earlier 1000-seed run gave 11.0%, 1.5 points off through seed noise.
+
+The weighted estimate is close to the truth here and the Korn-Graubard interval is conservative
+(it never missed in 5000 draws, against 95% nominal), partly because it ignores the
+finite-population correction (about 32% of the 181 skipped cases are audited). The cost is
+width: at this audit size the upper bound never fell below 5%, so the audit alone could not have
+confirmed the tolerance on any draw. This checks one population with three errors; it is not a
+general coverage result.
 
 ### Reproduce
 
