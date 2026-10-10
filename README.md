@@ -5,6 +5,33 @@ answers alone.
 
 [Guide](https://github.com/h-a-forster/shadowgate/blob/main/docs/guide.md) | [Results](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md) | [CLI](https://github.com/h-a-forster/shadowgate/blob/main/docs/cli.md) | [Configuration](https://github.com/h-a-forster/shadowgate/blob/main/docs/configuration.md)
 
+## Findings
+
+Numbers are for Claude Haiku 5.5 in front of Claude Opus 5.5 or Sonnet 5.5 on 1680 MMLU-Pro
+questions at threshold 0.80, graded against gold labels. Gold labels are noisy and costs are
+notional; see [Results](#results) and the [limitations](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#limitations).
+
+- **A shadow audit against a stronger model measures disagreement, not error.** Haiku's error on
+  the cases it served alone was 9.3% against gold labels, but its disagreement with Opus on those
+  cases was 6.1%, and the audit-only estimate was 5.1% (3.1-7.8). 44% of Haiku's errors were
+  shared by Opus (61% for Sonnet) and are invisible to the audit
+  ([details](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#error-against-disagreement-on-the-skipped-cases)).
+- **A weaker reference makes the cheap tier look better.** Against Sonnet, disagreement was 4.5%
+  and audit-only 4.1% (2.3-6.6) for the same 9.3% gold-graded error. Re-drawn 5000 times, the
+  audit's interval covered the gold-graded error 38.6% of the time with Opus and 0.8% with Sonnet,
+  but covered the true disagreement 99.8-99.9% ([coverage check](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#coverage-check-offline-5000-seeds)).
+- **The cascade trades a little accuracy for a large cost saving.** Haiku -> Opus scored 88.1%
+  against 91.2% for Opus alone and 83.0% for Haiku alone, saving 72% serving cost and 45% once
+  the audit is paid for; Haiku -> Sonnet saved 69% and 41% ([accuracy and cost](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#accuracy-and-cost)).
+- **Label noise cuts both ways.** In 13 hand-checked MMLU-Pro cases where both models gave the
+  same "wrong" answer, 5 gold labels were wrong, 6 were ambiguous and 2 were real errors, so true
+  error lies somewhere between the disagreement rate and the gold-graded rate
+  ([review](https://github.com/h-a-forster/shadowgate/blob/main/experiments/mmlu-pro-cascade/shared-errors-review.md)).
+- **A threshold tuned on one domain does not transfer, and the audit is slow to notice.** A
+  threshold tuned on STEM (0.88, 3.3% error) gave 12.3% error on the humanities questions Haiku
+  served alone; with about 41 audits the audit never said `ok` but confirmed the breach in only
+  8-11% of draws ([drift check](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#drift-check-offline-threshold-set-on-stem-served-on-humanities)).
+
 ## Why
 
 A cascade sends each task to a cheap model and escalates to a stronger one when confidence is
@@ -212,6 +239,31 @@ document. Setup, BBH numbers, coverage, drift and limitations:
 - [Examples](https://github.com/h-a-forster/shadowgate/blob/main/examples/README.md): configs for each backend.
 - [Results](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md): the MMLU-Pro, BIG-Bench Hard and arithmetic experiments and how to reproduce them.
 - [Design](https://github.com/h-a-forster/shadowgate/blob/main/docs/design.md): architecture and module contracts.
+
+## Open questions
+
+Questions this data raises. The decisions, configs and analysis for each are committed under
+[`experiments/`](https://github.com/h-a-forster/shadowgate/blob/main/experiments).
+
+- **Can the shared-error rate be estimated without gold labels?** 44-61% of Haiku's errors were
+  shared with the final tier, which is what separates disagreement from error. Start from
+  `experiments/analyze_cascade.py` (it computes shared errors and false alarms from the eval run)
+  and ask which observable signals predict them.
+- **Would a diverse panel of references help?** Shared errors depend on how correlated the cheap
+  and final tier are. Re-answer audited cases with models from different families and see how
+  much shared error survives; start from `examples/openai-compatible.toml` and `examples/anthropic.toml` for backend setup.
+- **Can disagreement with two final tiers bound the error?** Opus and Sonnet gave different
+  disagreement rates (6.1% vs 4.5%) for the same gold-graded error. The eval-mode decisions in
+  `experiments/mmlu-pro-cascade/` hold both, so combining them is a place to start.
+- **How well do confidence gates hold across domains?** The STEM threshold broke on humanities.
+  Compare `verbal`, `self_consistency` and `calibrated` signals (`src/shadowgate/confidence.py`)
+  per subject, using the `calibrate` and `sweep` commands (`src/shadowgate/sweep.py`).
+- **How should audit effort follow drift?** About 41 audits caught the humanities breach in 8-11%
+  of draws. Stratifying by subject or confidence band (`strata` in `[audit]`,
+  `src/shadowgate/audit.py`) is untested against this drift scenario.
+- **How much of the gap is label noise?** The 13-case hand check had one reviewer and two ad hoc
+  seeds. A larger, blinded relabelling of `experiments/mmlu-pro-cascade/shared-errors-review.md`
+  and the BBH shared errors would size it.
 
 ## Limitations
 
