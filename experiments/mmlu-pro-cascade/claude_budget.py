@@ -24,7 +24,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LOG = Path(os.environ.get("SHADOWGATE_COST_LOG", HERE / "costs.jsonl"))
 BUDGET = float(os.environ.get("SHADOWGATE_BUDGET_USD", "88"))
-RESERVE = float(os.environ.get("SHADOWGATE_RESERVE_USD", "0.25"))  # per in-flight call
+# Headroom for one call, not per call: with parallel workers the cap can be overshot by a few calls.
+RESERVE = float(os.environ.get("SHADOWGATE_RESERVE_USD", "0.25"))
 
 
 def spent() -> float:

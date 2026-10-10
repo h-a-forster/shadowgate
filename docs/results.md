@@ -101,7 +101,8 @@ What this shows:
   6 were ambiguous or had two defensible options, and 2 looked like real errors by both models.
   On BBH the shared errors cluster in tasks with known label problems (`geometric_shapes` 4,
   `date_understanding` 3, `salient_translation_error_detection` 3, `causal_judgement` 2,
-  `ruin_names` 1). The two `date_understanding` items checked have wrong gold labels. The
+  `ruin_names` 1). Two `date_understanding` items spot-checked by hand looked like wrong gold labels (not
+  written up, so treat this as anecdotal). The
   gold-graded error is not shown to be an upper bound on true error. Noisy labels cut both ways:
   a wrong gold label can also mark a wrong Haiku answer as right, and the hand check only looked
   at cases graded wrong. The 13 cases come from two ad hoc random seeds (7 and 8) and one

@@ -175,6 +175,9 @@ Claude Code CLI for $58 of CLI-reported cost.
 
 Haiku answers are shared across the two pairs (one response cache), so the Opus and Sonnet
 columns are paired comparisons, not independent replications.
+Savings are notional: Haiku is costed from the price table and Opus/Sonnet from the CLI's
+reported `total_cost_usd`, which includes CLI prompt overhead (see
+[results](docs/results.md)).
 
 The audit tracks disagreement, conservatively: re-drawn 5000 times offline, its interval covered
 the true disagreement rate 99.8-99.9% of the time, above the 95% nominal level, partly because the

@@ -22,8 +22,10 @@ rest) and read by hand. The verdicts are one reviewer's judgement, not a second 
 | 1370 | law | G | B | likely a real model error (gold plausible) |
 
 Summary: 5 of 13 gold labels are wrong, 6 are ambiguous or have more than one defensible option,
-and 2 look like real errors by both models. Most of the gap between Haiku's error against gold
-labels and its disagreement with Opus is therefore benchmark noise, not errors the audit missed.
-If the sample is representative, about 2 in 13 of the 55 shared errors (roughly 8) are real, and
-Haiku's true error on skipped cases is near its disagreement rate with Opus (6.1%), well below
-the gold-graded 9.3%. Thirteen cases is a small sample; read this as a direction, not a number.
+and 2 look like real errors by both models. This shows that label noise accounts for some of the
+gap between Haiku's gold-graded error (9.3%) and its disagreement with Opus (6.1%), not how much.
+Thirteen cases from two ad hoc seeds and one reviewer are too few to size it, and the check only
+read cases graded wrong: a wrong gold label can also mark a wrong Haiku answer as right, which
+would push true error up. So the gold-graded rate is not shown to be an upper bound, and Haiku's
+true error on skipped cases could lie below the disagreement rate or above the gold-graded rate.
+See [results](../../docs/results.md) for how this feeds into the headline numbers.
