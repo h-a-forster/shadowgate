@@ -85,8 +85,11 @@ def test_replay_bad_files(tmp_path: Path) -> None:
 
 
 def test_function_backend_string() -> None:
-    fb = FunctionBackend(lambda r: r.prompt.upper(), name="upper",
-                         pricing=Pricing(input_per_mtok=1.0, output_per_mtok=2.0))
+    fb = FunctionBackend(
+        lambda r: r.prompt.upper(),
+        name="upper",
+        pricing=Pricing(input_per_mtok=1.0, output_per_mtok=2.0),
+    )
     c = fb.complete(Request(prompt="abcdefgh", system="s"))
     assert c.text == "ABCDEFGH"
     assert c.model == "upper" and fb.name == "upper"

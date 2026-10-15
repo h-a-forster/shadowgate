@@ -89,17 +89,25 @@ def test_anthropic_spec(fakes: dict[str, type]) -> None:
 
 
 def test_other_provider_specs(fakes: dict[str, type]) -> None:
-    o = make_backend({"type": "openai", "model": "llama", "base_url": "http://localhost:11434/v1",
-                      "headers": {"X-A": "1"}})
+    o = make_backend(
+        {
+            "type": "openai",
+            "model": "llama",
+            "base_url": "http://localhost:11434/v1",
+            "headers": {"X-A": "1"},
+        }
+    )
     assert isinstance(o, fakes["OpenAICompatBackend"])
     assert o.kwargs == {"base_url": "http://localhost:11434/v1", "headers": {"X-A": "1"}}
     c = make_backend({"type": "claude-code", "model": "haiku", "extra_args": ["--x"]})
     assert isinstance(c, fakes["ClaudeCodeBackend"]) and c.kwargs == {"extra_args": ("--x",)}
-    cp = make_backend({"type": "claude-code", "model": "haiku",
-                       "pricing": {"input": 1.0, "output": 5.0}})
+    cp = make_backend(
+        {"type": "claude-code", "model": "haiku", "pricing": {"input": 1.0, "output": 5.0}}
+    )
     assert cp.kwargs == {"pricing": Pricing(input_per_mtok=1.0, output_per_mtok=5.0)}
-    m = make_backend({"type": "command", "command": ["python", "s.py"],
-                      "retryable_exit_codes": [75]})
+    m = make_backend(
+        {"type": "command", "command": ["python", "s.py"], "retryable_exit_codes": [75]}
+    )
     assert isinstance(m, fakes["CommandBackend"])
     assert m.args == (["python", "s.py"],) and m.kwargs == {"retryable_exit_codes": (75,)}
     s = make_backend({"type": "command", "command": "echo hi"})
@@ -139,16 +147,24 @@ def test_simulated_spec() -> None:
     with pytest.raises(ConfigError, match="tasks"):
         make_backend({"type": "simulated", "skill": 1.0})
     b = make_backend(
-        {"type": "simulated", "name": "small", "skill": 1, "seed": 3, "overconfidence": 0.1,
-         "pricing": {"input": 2, "output": 4}, "emit_logprobs": False},
+        {
+            "type": "simulated",
+            "name": "small",
+            "skill": 1,
+            "seed": 3,
+            "overconfidence": 0.1,
+            "pricing": {"input": 2, "output": 4},
+            "emit_logprobs": False,
+        },
         tasks=TASKS,
     )
     assert isinstance(b, SimulatedBackend)
     assert b.name == "sim:small" and b.seed == 3 and b.overconfidence == 0.1
     assert b.pricing == Pricing(input_per_mtok=2.0, output_per_mtok=4.0)
     assert b.complete(Request(prompt="What is 1+1?")).cost_usd is not None
-    assert make_backend({"type": "simulated", "model": "m2", "skill": 0},
-                        tasks=TASKS).name == "sim:m2"
+    assert (
+        make_backend({"type": "simulated", "model": "m2", "skill": 0}, tasks=TASKS).name == "sim:m2"
+    )
 
 
 def test_replay_spec(tmp_path: Path) -> None:
@@ -178,8 +194,15 @@ def test_cache_wrapping(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("spec", "module"),
     [
-        ({"type": "openai", "model": "llama3", "base_url": "http://localhost:1/v1",
-          "api_key_env": "SHADOWGATE_TEST_UNSET_KEY"}, "openai_compat"),
+        (
+            {
+                "type": "openai",
+                "model": "llama3",
+                "base_url": "http://localhost:1/v1",
+                "api_key_env": "SHADOWGATE_TEST_UNSET_KEY",
+            },
+            "openai_compat",
+        ),
         ({"type": "command", "command": ["python", "-c", "print(1)"]}, "command"),
     ],
 )

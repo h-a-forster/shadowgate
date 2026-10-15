@@ -68,20 +68,48 @@ _KEYS: dict[str, frozenset[str]] = {
         {"model", "name", "api_key_env", "base_url", "timeout_s", "max_attempts", "pricing"}
     ),
     "openai": frozenset(
-        {"model", "name", "api_key_env", "base_url", "timeout_s", "max_attempts", "pricing",
-         "headers"}
+        {
+            "model",
+            "name",
+            "api_key_env",
+            "base_url",
+            "timeout_s",
+            "max_attempts",
+            "pricing",
+            "headers",
+        }
     ),
     "claude-code": frozenset(
-        {"model", "name", "executable", "timeout_s", "max_attempts", "extra_args",
-         "default_system", "pricing"}
+        {
+            "model",
+            "name",
+            "executable",
+            "timeout_s",
+            "max_attempts",
+            "extra_args",
+            "default_system",
+            "pricing",
+        }
     ),
     "command": frozenset(
         {"command", "name", "timeout_s", "max_attempts", "pricing", "retryable_exit_codes", "cwd"}
     ),
     "simulated": frozenset(
-        {"name", "model", "skill", "seed", "overconfidence", "confidence_noise",
-         "discrimination", "systematic_error", "pricing", "latency_s", "latency_per_token_s",
-         "emit_confidence", "emit_logprobs"}
+        {
+            "name",
+            "model",
+            "skill",
+            "seed",
+            "overconfidence",
+            "confidence_noise",
+            "discrimination",
+            "systematic_error",
+            "pricing",
+            "latency_s",
+            "latency_per_token_s",
+            "emit_confidence",
+            "emit_logprobs",
+        }
     ),
     "replay": frozenset({"path", "name", "key_backend"}),
 }
@@ -165,8 +193,15 @@ def make_backend(
         pricing = pricing_from_spec(spec["pricing"])
         if pricing is not None:
             kwargs["pricing"] = pricing
-    for key in ("name", "api_key_env", "base_url", "executable", "default_system", "cwd",
-                "key_backend"):
+    for key in (
+        "name",
+        "api_key_env",
+        "base_url",
+        "executable",
+        "default_system",
+        "cwd",
+        "key_backend",
+    ):
         if key in spec:
             kwargs[key] = spec[key]
 
@@ -224,8 +259,15 @@ def _build(
                 "backend type 'simulated' needs the task list (make_backend(..., tasks=...))"
             )
         name = kwargs.pop("name", None) or spec.get("model") or "model"
-        for key in ("skill", "overconfidence", "confidence_noise", "discrimination",
-                    "systematic_error", "latency_s", "latency_per_token_s"):
+        for key in (
+            "skill",
+            "overconfidence",
+            "confidence_noise",
+            "discrimination",
+            "systematic_error",
+            "latency_s",
+            "latency_per_token_s",
+        ):
             if key in spec:
                 kwargs[key] = _number(spec, key)
         if "seed" in spec:

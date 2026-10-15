@@ -46,8 +46,12 @@ def make_decision(
     answer: str = "42",
     created_at: str = "2026-01-01T00:00:00+00:00",
 ) -> Decision:
-    task = Task(id=task_id, prompt=f"What is {task_id}? é中", reference="42",
-                meta={"dataset": "toy", "difficulty": 3, "tags": ["a", "b"]})
+    task = Task(
+        id=task_id,
+        prompt=f"What is {task_id}? é中",
+        reference="42",
+        meta={"dataset": "toy", "difficulty": 3, "tags": ["a", "b"]},
+    )
     conf = ConfidenceResult(
         estimator="self_consistency",
         score=0.4,
@@ -76,8 +80,14 @@ def make_decision(
         correct=Judgement(True, "exact"),
     )
     failed = Attempt(
-        tier="mid", backend="sim:mid", completion=None, answer="", confidence=None,
-        threshold=0.5, accepted=False, error="BackendError: boom",
+        tier="mid",
+        backend="sim:mid",
+        completion=None,
+        answer="",
+        confidence=None,
+        threshold=0.5,
+        accepted=False,
+        error="BackendError: boom",
     )
     shadow = None
     if shadow_status is not None:
@@ -87,9 +97,13 @@ def make_decision(
             status=shadow_status,
             attempt=large if shadow_status == "done" else None,
             agreement=Judgement(
-                None, "judge", calls=(_completion("UNSURE", model="judge"),),
+                None,
+                "judge",
+                calls=(_completion("UNSURE", model="judge"),),
                 detail={"raw": "?"},
-            ) if shadow_status == "done" else None,
+            )
+            if shadow_status == "done"
+            else None,
         )
     return Decision(
         run_id=run_id,
@@ -212,8 +226,10 @@ def test_newer_schema_version_rejected(tmp_path: Path) -> None:
     path = tmp_path / "l.sqlite"
     Ledger(path).close()
     conn = sqlite3.connect(path)
-    conn.execute("UPDATE meta SET value = ? WHERE key = 'shadowgate_schema_version'",
-                 (str(Ledger.SCHEMA_VERSION + 1),))
+    conn.execute(
+        "UPDATE meta SET value = ? WHERE key = 'shadowgate_schema_version'",
+        (str(Ledger.SCHEMA_VERSION + 1),),
+    )
     conn.commit()
     conn.close()
     with pytest.raises(LedgerError, match="newer"):
@@ -245,8 +261,10 @@ def test_empty_file_becomes_ledger(tmp_path: Path) -> None:
 
 
 def test_export_import_round_trip(tmp_path: Path) -> None:
-    ds = [make_decision("r1", f"t{i}", shadow_status=("pending" if i % 2 else "done"))
-          for i in range(5)]
+    ds = [
+        make_decision("r1", f"t{i}", shadow_status=("pending" if i % 2 else "done"))
+        for i in range(5)
+    ]
     out = tmp_path / "out" / "r1.jsonl"
     with Ledger(tmp_path / "a.sqlite") as a:
         for d in ds:
@@ -287,7 +305,9 @@ def test_redaction(ledger: Ledger) -> None:
     ledger.start_run("r", config=config, mode="serve")
     stored = ledger.runs()[0].config
     assert stored["backends"]["a"] == {
-        "api_key": REDACTED, "api_key_env": "ANTHROPIC_API_KEY", "max_tokens": 10,
+        "api_key": REDACTED,
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_tokens": 10,
     }
     assert stored["backends"]["b"]["apiKey"] == REDACTED
     assert stored["backends"]["b"]["nested"] == [{"password": REDACTED, "access_token": REDACTED}]
@@ -408,8 +428,17 @@ def test_migrates_v1_ledger_in_place(tmp_path: Path) -> None:
     for d in (ok, bad):
         conn.execute(
             "INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("r1", d.task.id, d.created_at, "serve", d.final_tier, 1, None, "done",
-             json.dumps(d.to_dict())),
+            (
+                "r1",
+                d.task.id,
+                d.created_at,
+                "serve",
+                d.final_tier,
+                1,
+                None,
+                "done",
+                json.dumps(d.to_dict()),
+            ),
         )
     conn.commit()
     conn.close()
@@ -446,8 +475,9 @@ def test_export_header_restores_run_config(tmp_path: Path) -> None:
 
 def test_import_header_mode_conflict(tmp_path: Path) -> None:
     out = tmp_path / "h.jsonl"
-    out.write_text(json.dumps({"shadowgate_run": {"run_id": "r1", "mode": "eval"}}),
-                   encoding="utf-8")
+    out.write_text(
+        json.dumps({"shadowgate_run": {"run_id": "r1", "mode": "eval"}}), encoding="utf-8"
+    )
     with Ledger(tmp_path / "dst.sqlite") as b:
         b.start_run("r1", config={}, mode="serve")
         with pytest.raises(LedgerError, match="mode"):

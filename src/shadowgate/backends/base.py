@@ -25,8 +25,9 @@ class TransientError(Exception):
     ``retry_after`` (seconds) is honored when the provider supplied one.
     """
 
-    def __init__(self, message: str, *, status: int | None = None,
-                 retry_after: float | None = None) -> None:
+    def __init__(
+        self, message: str, *, status: int | None = None, retry_after: float | None = None
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.retry_after = retry_after
@@ -44,7 +45,7 @@ class RetryPolicy:
     def delay(self, attempt: int, retry_after: float | None, rng: random.Random) -> float:
         if retry_after is not None and retry_after >= 0:
             return min(retry_after, self.max_retry_after_s)
-        cap = min(self.max_delay_s, self.base_delay_s * (2 ** attempt))
+        cap = min(self.max_delay_s, self.base_delay_s * (2**attempt))
         return rng.uniform(0, cap)
 
 

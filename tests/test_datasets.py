@@ -122,10 +122,10 @@ def test_json_errors(tmp_path: Path) -> None:
 def test_csv_with_bom_crlf_aliases(tmp_path: Path) -> None:
     text = (
         "id,question,answer,topic\r\n"
-        "q1,\"What is 6, times 7?\",42,math\r\n"
+        'q1,"What is 6, times 7?",42,math\r\n'
         ",Name a colour,,art\r\n"
         "\r\n"
-        "q3,\"multi\r\nline\",x,misc\r\n"
+        'q3,"multi\r\nline",x,misc\r\n'
     )
     p = _write(tmp_path / "t.csv", text, encoding="utf-8-sig")
     tasks = load_tasks(p)
@@ -272,9 +272,7 @@ def test_gsm8k_parsing(tmp_path: Path) -> None:
         {"question": "A big number?", "answer": "Work...\n#### 1,234"},
         {"question": "Negative?", "answer": "Steps\n####  -7 "},
     ]
-    p = _write(
-        tmp_path / "gsm.jsonl", "\r\n".join(json.dumps(r) for r in rows) + "\r\n\r\n"
-    )
+    p = _write(tmp_path / "gsm.jsonl", "\r\n".join(json.dumps(r) for r in rows) + "\r\n\r\n")
     tasks = gsm8k(p)
     assert [t.id for t in tasks] == ["gsm8k-0001", "gsm8k-0002", "gsm8k-0003"]
     assert [t.reference for t in tasks] == ["5", "1234", "-7"]

@@ -101,8 +101,9 @@ def test_success(server: tuple[str, Script], monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("SHADOWGATE_TEST_OPENAI_KEY", "sk-test-123")
     b, sleeps = _backend(url + "/", pricing=Pricing(1.0, 2.0))
     assert b.name == "openai:test-model"
-    c = b.complete(Request(prompt="2+2?", system="be brief", max_tokens=16, n_sample=2,
-                           tags={"task_id": "t"}))
+    c = b.complete(
+        Request(prompt="2+2?", system="be brief", max_tokens=16, n_sample=2, tags={"task_id": "t"})
+    )
     assert c.text == "ANSWER: 4"
     assert c.stop_reason == "end"
     assert c.usage.input_tokens == 12 and c.usage.output_tokens == 5
@@ -132,8 +133,14 @@ def test_no_key_no_auth_header_and_extra(
     monkeypatch.delenv("SHADOWGATE_TEST_OPENAI_KEY", raising=False)
     b, _ = _backend(url, headers={"X-Extra": "1"}, name="local")
     assert b.name == "local"
-    b.complete(Request(prompt="q", temperature=0.5, stop=("\n\n",),
-                       extra={"max_completion_tokens": 99, "seed": 1}))
+    b.complete(
+        Request(
+            prompt="q",
+            temperature=0.5,
+            stop=("\n\n",),
+            extra={"max_completion_tokens": 99, "seed": 1},
+        )
+    )
     req = script.requests[0]
     assert "Authorization" not in req["headers"]
     assert req["headers"]["X-Extra"] == "1"
@@ -150,11 +157,18 @@ def test_logprobs(server: tuple[str, Script]) -> None:
         "index": 0,
         "message": {"role": "assistant", "content": "4"},
         "finish_reason": "length",
-        "logprobs": {"content": [{"token": "4", "logprob": -0.1, "top_logprobs": []},
-                                 {"token": ".", "logprob": -0.5, "top_logprobs": []}]},
+        "logprobs": {
+            "content": [
+                {"token": "4", "logprob": -0.1, "top_logprobs": []},
+                {"token": ".", "logprob": -0.5, "top_logprobs": []},
+            ]
+        },
     }
-    usage = {"prompt_tokens": 10, "completion_tokens": 2,
-             "prompt_tokens_details": {"cached_tokens": 4}}
+    usage = {
+        "prompt_tokens": 10,
+        "completion_tokens": 2,
+        "prompt_tokens_details": {"cached_tokens": 4},
+    }
     script.responses = [(200, {}, _ok_body(choices=[choice], usage=usage))]
     b, _ = _backend(url)
     c = b.complete(Request(prompt="q", want_logprobs=True))
@@ -218,8 +232,11 @@ def test_invalid_json_response(server: tuple[str, Script]) -> None:
 
 def test_refusal_and_provider_cost(server: tuple[str, Script]) -> None:
     url, script = server
-    choice = {"index": 0, "message": {"role": "assistant", "content": None,
-                                      "refusal": "cannot help"}, "finish_reason": "stop"}
+    choice = {
+        "index": 0,
+        "message": {"role": "assistant", "content": None, "refusal": "cannot help"},
+        "finish_reason": "stop",
+    }
     usage = {"prompt_tokens": 3, "completion_tokens": 2, "cost": 0.0012}
     script.responses = [(200, {}, _ok_body(choices=[choice], usage=usage))]
     b, _ = _backend(url)
@@ -237,8 +254,9 @@ def test_connection_refused_is_retryable(monkeypatch: pytest.MonkeyPatch) -> Non
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
-    b, sleeps = _backend(f"http://127.0.0.1:{port}/v1", retry=RetryPolicy(max_attempts=2,
-                                                                          base_delay_s=0))
+    b, sleeps = _backend(
+        f"http://127.0.0.1:{port}/v1", retry=RetryPolicy(max_attempts=2, base_delay_s=0)
+    )
     with pytest.raises(BackendError) as info:
         b.complete(Request(prompt="q"))
     assert info.value.retryable is True
@@ -360,8 +378,9 @@ def test_overall_timeout_on_trickling_body(no_proxy: None) -> None:
             pass
 
     with _Server(trickle) as api:
-        b, _ = _backend(f"http://127.0.0.1:{api.port}/v1", timeout_s=1,
-                        retry=RetryPolicy(max_attempts=1))
+        b, _ = _backend(
+            f"http://127.0.0.1:{api.port}/v1", timeout_s=1, retry=RetryPolicy(max_attempts=1)
+        )
         t0 = time.monotonic()
         with pytest.raises(BackendError) as ei:
             b.complete(Request(prompt="hi"))

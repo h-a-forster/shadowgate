@@ -68,15 +68,17 @@ def _result(**overrides: Any) -> str:
 
 
 def _error_result(message: str, status: int | None = None) -> str:
-    return json.dumps({
-        "type": "result",
-        "subtype": "success",
-        "is_error": True,
-        "result": message,
-        "api_error_status": status,
-        "total_cost_usd": 0,
-        "usage": {"input_tokens": 0, "output_tokens": 0},
-    })
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "result": message,
+            "api_error_status": status,
+            "total_cost_usd": 0,
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+        }
+    )
 
 
 class FakeCli:
@@ -109,11 +111,24 @@ def cli(tmp_path: Path) -> FakeCli:
 
 def test_fixture_shape() -> None:
     data = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    for key in ("type", "subtype", "is_error", "result", "usage", "total_cost_usd",
-                "stop_reason", "session_id", "modelUsage"):
+    for key in (
+        "type",
+        "subtype",
+        "is_error",
+        "result",
+        "usage",
+        "total_cost_usd",
+        "stop_reason",
+        "session_id",
+        "modelUsage",
+    ):
         assert key in data
-    for key in ("input_tokens", "output_tokens", "cache_read_input_tokens",
-                "cache_creation_input_tokens"):
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ):
         assert key in data["usage"]
 
 
@@ -228,9 +243,7 @@ def test_overload_exhausts_retries(cli: FakeCli) -> None:
 def test_timeout_is_transient(cli: FakeCli) -> None:
     cli.respond({"stdout": _result(), "sleep": 5})
     with pytest.raises(BackendError) as ei:
-        cli.backend(timeout_s=0.5, retry=RetryPolicy(max_attempts=1)).complete(
-            Request(prompt="x")
-        )
+        cli.backend(timeout_s=0.5, retry=RetryPolicy(max_attempts=1)).complete(Request(prompt="x"))
     assert ei.value.retryable is True
     assert "timed out" in str(ei.value)
 
@@ -320,7 +333,7 @@ def _shim(cli: FakeCli, tmp_path: Path) -> str:
 
 def _assert_isolated(argv: list[str]) -> None:
     assert argv[:5] == ["-p", "--output-format", "json", "--model", "haiku"]
-    assert argv[-len(DEFAULT_ISOLATION_ARGS):] == list(DEFAULT_ISOLATION_ARGS)
+    assert argv[-len(DEFAULT_ISOLATION_ARGS) :] == list(DEFAULT_ISOLATION_ARGS)
     assert "--system-prompt" not in argv
 
 
@@ -368,7 +381,7 @@ def test_shim_unsafe_scratch_path_falls_back_in_band(cli: FakeCli, tmp_path: Pat
     )
     assert stdin == "S\n& x\n\nq"
     assert "--system-prompt-file" not in argv and "--system-prompt" not in argv
-    assert argv[-len(DEFAULT_ISOLATION_ARGS):] == list(DEFAULT_ISOLATION_ARGS)
+    assert argv[-len(DEFAULT_ISOLATION_ARGS) :] == list(DEFAULT_ISOLATION_ARGS)
     argv2, stdin2 = b.build_command(Request(prompt="q", system="S"))  # no scratch dir
     assert stdin2 == "S\n\nq" and "--system-prompt-file" not in argv2
 
@@ -378,7 +391,7 @@ def test_non_shim_system_with_newline_stays_on_argv(cli: FakeCli) -> None:
     cli.backend().complete(Request(prompt="hi", system="Answer briefly.\n"))
     argv = cli.calls[0]["argv"]
     assert argv[argv.index("--system-prompt") + 1] == "Answer briefly.\n"
-    assert argv[-len(DEFAULT_ISOLATION_ARGS):] == list(DEFAULT_ISOLATION_ARGS)
+    assert argv[-len(DEFAULT_ISOLATION_ARGS) :] == list(DEFAULT_ISOLATION_ARGS)
 
 
 def test_timeout_kills_grandchild_holding_pipes(cli: FakeCli) -> None:
@@ -387,9 +400,7 @@ def test_timeout_kills_grandchild_holding_pipes(cli: FakeCli) -> None:
     cli.respond({"stdout": _result(), "grandchild": 30, "sleep": 30})
     t0 = time.monotonic()
     with pytest.raises(BackendError) as ei:
-        cli.backend(timeout_s=1.0, retry=RetryPolicy(max_attempts=1)).complete(
-            Request(prompt="x")
-        )
+        cli.backend(timeout_s=1.0, retry=RetryPolicy(max_attempts=1)).complete(Request(prompt="x"))
     elapsed = time.monotonic() - t0
     assert ei.value.retryable is True and "timed out" in str(ei.value)
     assert elapsed < 1.0 + 4.0, elapsed
@@ -399,8 +410,12 @@ def test_timeout_kills_grandchild_holding_pipes(cli: FakeCli) -> None:
 
 
 def _usage_result(model: str, *, basis: str | None, cli_cost: float, **usage: Any) -> str:
-    u = {"input_tokens": 1000, "output_tokens": 100, "cache_read_input_tokens": 0,
-         "cache_creation_input_tokens": 0}
+    u = {
+        "input_tokens": 1000,
+        "output_tokens": 100,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+    }
     u.update(usage)
     entry: dict[str, Any] = {"inputTokens": u["input_tokens"], "costUSD": cli_cost}
     if basis is not None:
@@ -418,8 +433,12 @@ def test_fixture_cost_matches_table(cli: FakeCli) -> None:
 
 def test_unrecognized_model_uses_table_not_cli(cli: FakeCli) -> None:
     # The CLI misprices models it does not know (~50x too high) and says so on stderr.
-    cli.respond({"stdout": _usage_result("claude-haiku-5-5", basis="unknown", cli_cost=0.05),
-                 "stderr": "[claude-code:unrecognized_model] claude-haiku-5-5\n"})
+    cli.respond(
+        {
+            "stdout": _usage_result("claude-haiku-5-5", basis="unknown", cli_cost=0.05),
+            "stderr": "[claude-code:unrecognized_model] claude-haiku-5-5\n",
+        }
+    )
     comp = cli.backend().complete(Request(prompt="x"))
     assert comp.model == "claude-haiku-5-5"
     assert comp.cost_usd == pytest.approx((1000 * 0.10 + 100 * 0.50) / 1e6)
@@ -437,8 +456,9 @@ def test_unrecognized_model_uses_table_not_cli(cli: FakeCli) -> None:
 def test_cli_cost_only_with_known_basis(
     cli: FakeCli, basis: str | None, stderr: str, expected: float | None
 ) -> None:
-    cli.respond({"stdout": _usage_result("claude-future-9", basis=basis, cli_cost=0.0123),
-                 "stderr": stderr})
+    cli.respond(
+        {"stdout": _usage_result("claude-future-9", basis=basis, cli_cost=0.0123), "stderr": stderr}
+    )
     comp = cli.backend().complete(Request(prompt="x"))
     assert comp.model == "claude-future-9"
     if expected is None:
@@ -464,10 +484,18 @@ def test_configured_model_used_when_cli_reports_none(cli: FakeCli) -> None:
 
 
 def test_one_hour_cache_writes_priced_at_2x(cli: FakeCli) -> None:
-    out = json.loads(_usage_result("claude-haiku-4-5-20251001", basis="list", cli_cost=1.0,
-                                   cache_creation_input_tokens=3000))
-    out["usage"]["cache_creation"] = {"ephemeral_1h_input_tokens": 2000,
-                                      "ephemeral_5m_input_tokens": 1000}
+    out = json.loads(
+        _usage_result(
+            "claude-haiku-4-5-20251001",
+            basis="list",
+            cli_cost=1.0,
+            cache_creation_input_tokens=3000,
+        )
+    )
+    out["usage"]["cache_creation"] = {
+        "ephemeral_1h_input_tokens": 2000,
+        "ephemeral_5m_input_tokens": 1000,
+    }
     cli.respond({"stdout": json.dumps(out)})
     comp = cli.backend().complete(Request(prompt="x"))
     assert PRICES["claude-haiku-4-5"].input_per_mtok == 1.0

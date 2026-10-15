@@ -393,4 +393,3 @@ class OpenAICompatBackend:
 
     def __repr__(self) -> str:
         return f"OpenAICompatBackend(name={self.name!r}, url={self.url!r})"
-

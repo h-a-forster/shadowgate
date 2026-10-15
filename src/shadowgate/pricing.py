@@ -173,15 +173,20 @@ def cost_with_cache_ttl(
     if n_1h:
         card = pricing.card_for(usage)
         write = (
-            card.input_per_mtok if card.cache_write_per_mtok is None
-            else card.cache_write_per_mtok
+            card.input_per_mtok if card.cache_write_per_mtok is None else card.cache_write_per_mtok
         )
         total += n_1h * (2.0 * card.input_per_mtok - write) / _MTOK
     return total
 
 
-_SPEC_KEYS = {"input", "output", "cache_read", "cache_write", "long_context",
-              "long_context_threshold"}
+_SPEC_KEYS = {
+    "input",
+    "output",
+    "cache_read",
+    "cache_write",
+    "long_context",
+    "long_context_threshold",
+}
 
 
 def _rate(spec: Mapping[str, Any], key: str, *, required: bool) -> float | None:

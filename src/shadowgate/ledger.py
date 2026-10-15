@@ -99,11 +99,21 @@ def _utc_now() -> str:
 
 
 _SECRET_WORDS = frozenset(
-    {"token", "secret", "secrets", "password", "passwd", "passphrase", "apikey", "credential",
-     "credentials"}
+    {
+        "token",
+        "secret",
+        "secrets",
+        "password",
+        "passwd",
+        "passphrase",
+        "apikey",
+        "credential",
+        "credentials",
+    }
 )
-_SECRET_PAIRS = frozenset({("api", "key"), ("private", "key"), ("access", "key"),
-                           ("secret", "key"), ("auth", "key")})
+_SECRET_PAIRS = frozenset(
+    {("api", "key"), ("private", "key"), ("access", "key"), ("secret", "key"), ("auth", "key")}
+)
 
 
 def _is_secret_key(key: str) -> bool:
@@ -195,12 +205,12 @@ class Ledger:
             conn.execute(f"PRAGMA busy_timeout = {int(_BUSY_TIMEOUT_S * 1000)}")
             # Reading sqlite_master is the first real read: a non-database file fails here.
             tables = {
-                r[0]
-                for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+                r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
             }
         except sqlite3.DatabaseError as exc:
-            raise LedgerError(f"{self.path} is not a shadowgate ledger (not SQLite): {exc}") \
-                from exc
+            raise LedgerError(
+                f"{self.path} is not a shadowgate ledger (not SQLite): {exc}"
+            ) from exc
 
         stored_version: int | None = None
         if tables:
@@ -365,9 +375,7 @@ class Ledger:
             conn = self._conn
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                row = conn.execute(
-                    "SELECT mode FROM runs WHERE run_id = ?", (run_id,)
-                ).fetchone()
+                row = conn.execute("SELECT mode FROM runs WHERE run_id = ?", (run_id,)).fetchone()
                 if row is None:
                     conn.execute(
                         "INSERT INTO runs (run_id, created_at, mode, config_json, note) "
@@ -409,9 +417,7 @@ class Ledger:
         return out
 
     def latest_run_id(self) -> str | None:
-        rows = self._query(
-            "SELECT run_id FROM runs ORDER BY created_at DESC, rowid DESC LIMIT 1"
-        )
+        rows = self._query("SELECT run_id FROM runs ORDER BY created_at DESC, rowid DESC LIMIT 1")
         return rows[0][0] if rows else None
 
     # ------------------------------------------------------------------ decisions
@@ -516,9 +522,7 @@ class Ledger:
                     else:
                         items.append(Decision.from_dict(obj))
                 except (ValueError, KeyError, TypeError, AttributeError) as exc:
-                    raise LedgerError(
-                        f"{path}:{lineno}: invalid decision record: {exc}"
-                    ) from exc
+                    raise LedgerError(f"{path}:{lineno}: invalid decision record: {exc}") from exc
         self._check_run_headers(headers, path)
         for h in headers:
             self._import_run_header(h)
@@ -557,8 +561,13 @@ class Ledger:
                     conn.execute(
                         "INSERT INTO runs (run_id, created_at, mode, config_json, note) "
                         "VALUES (?, ?, ?, ?, ?)",
-                        (h["run_id"], str(h.get("created_at") or _utc_now()), h["mode"],
-                         config_json, str(h.get("note") or "")),
+                        (
+                            h["run_id"],
+                            str(h.get("created_at") or _utc_now()),
+                            h["mode"],
+                            config_json,
+                            str(h.get("note") or ""),
+                        ),
                     )
                 elif row[0] != h["mode"]:
                     raise LedgerError(
