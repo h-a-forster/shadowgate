@@ -32,11 +32,21 @@ def make_tasks(n: int = 2000, seed: int = 7) -> list[Task]:
 TASKS = make_tasks()
 
 
-def ask(task: Task, *, n_sample: int = 0, confidence: bool = True, logprobs: bool = False,
-        tag: bool = True) -> Request:
+def ask(
+    task: Task,
+    *,
+    n_sample: int = 0,
+    confidence: bool = True,
+    logprobs: bool = False,
+    tag: bool = True,
+) -> Request:
     prompt = task.prompt + ("\nEnd with CONFIDENCE: <0-1>." if confidence else "")
-    return Request(prompt=prompt, n_sample=n_sample, want_logprobs=logprobs,
-                   tags={"task_id": task.id} if tag else {})
+    return Request(
+        prompt=prompt,
+        n_sample=n_sample,
+        want_logprobs=logprobs,
+        tags={"task_id": task.id} if tag else {},
+    )
 
 
 def answer_of(text: str) -> str:
@@ -256,11 +266,19 @@ def test_invalid_config() -> None:
 def test_cache_fingerprint_covers_all_params() -> None:
     tasks = [Task("a", "p", "1")]
     base = SimulatedBackend("m", skill=1.0, tasks=tasks).cache_fingerprint()
-    for kw in ({"skill": 2.0}, {"seed": 1}, {"overconfidence": 0.1}, {"confidence_noise": 0.2},
-               {"discrimination": 0.3}, {"systematic_error": 0.5},
-               {"pricing": Pricing(100.0, 500.0)}, {"latency_s": 1.0},
-               {"latency_per_token_s": 0.5}, {"emit_confidence": False},
-               {"emit_logprobs": False}):
+    for kw in (
+        {"skill": 2.0},
+        {"seed": 1},
+        {"overconfidence": 0.1},
+        {"confidence_noise": 0.2},
+        {"discrimination": 0.3},
+        {"systematic_error": 0.5},
+        {"pricing": Pricing(100.0, 500.0)},
+        {"latency_s": 1.0},
+        {"latency_per_token_s": 0.5},
+        {"emit_confidence": False},
+        {"emit_logprobs": False},
+    ):
         merged = {"skill": 1.0, **kw}
         assert SimulatedBackend("m", tasks=tasks, **merged).cache_fingerprint() != base, kw
     assert SimulatedBackend("m", skill=1.0, tasks=tasks).cache_fingerprint() == base

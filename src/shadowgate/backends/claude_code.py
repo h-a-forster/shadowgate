@@ -40,8 +40,10 @@ log = logging.getLogger("shadowgate.backends.claude_code")
 #: no MCP servers beyond those passed explicitly (none). Override via ``isolation_args`` if a CLI
 #: version lacks one of them.
 DEFAULT_ISOLATION_ARGS: tuple[str, ...] = (
-    "--tools", "",
-    "--setting-sources", "",
+    "--tools",
+    "",
+    "--setting-sources",
+    "",
     "--no-session-persistence",
     "--disable-slash-commands",
     "--strict-mcp-config",
@@ -207,9 +209,7 @@ class ClaudeCodeBackend:
 
         # Through a cmd.exe shim no free text goes on the command line: the system prompt is
         # written to a file (--system-prompt-file) or, failing that, sent in-band on stdin.
-        file_ok = (
-            shim and scratch_dir is not None and bool(_SHIM_SAFE_PATH.fullmatch(scratch_dir))
-        )
+        file_ok = shim and scratch_dir is not None and bool(_SHIM_SAFE_PATH.fullmatch(scratch_dir))
         system = request.system if request.system is not None else self.default_system
         if shim:
             if system is not None and file_ok:
@@ -254,11 +254,14 @@ class ClaudeCodeBackend:
 
     def _call_once(self, request: Request) -> Completion:
         env = None if self.env is None else {**os.environ, **self.env}
-        with tempfile.TemporaryDirectory(
-            prefix="shadowgate-claude-", ignore_cleanup_errors=True
-        ) as workdir, tempfile.TemporaryDirectory(
-            prefix="shadowgate-claude-sys-", ignore_cleanup_errors=True
-        ) as scratch:
+        with (
+            tempfile.TemporaryDirectory(
+                prefix="shadowgate-claude-", ignore_cleanup_errors=True
+            ) as workdir,
+            tempfile.TemporaryDirectory(
+                prefix="shadowgate-claude-sys-", ignore_cleanup_errors=True
+            ) as scratch,
+        ):
             # The system-prompt file lives outside the (empty) working directory.
             argv, stdin_text = self.build_command(request, scratch_dir=scratch)
             with Timer() as timer:
@@ -302,8 +305,9 @@ class ClaudeCodeBackend:
             cache_write_tokens=_int(usage_d, "cache_creation_input_tokens"),
         )
         creation = usage_d.get("cache_creation")
-        write_1h = _int(creation, "ephemeral_1h_input_tokens") \
-            if isinstance(creation, Mapping) else 0
+        write_1h = (
+            _int(creation, "ephemeral_1h_input_tokens") if isinstance(creation, Mapping) else 0
+        )
         raw_stop = data.get("stop_reason")
         stop_reason = _STOP_REASONS.get(raw_stop, raw_stop) if raw_stop else "end"
         model = self.model
@@ -363,8 +367,7 @@ class ClaudeCodeBackend:
 
     def complete(self, request: Request) -> Completion:
         if request.temperature is not None or request.stop or request.want_logprobs:
-            log.debug("%s: temperature/stop/logprobs are not supported and are ignored",
-                      self.name)
+            log.debug("%s: temperature/stop/logprobs are not supported and are ignored", self.name)
         return call_with_retries(
             lambda: self._call_once(request), policy=self.retry, backend=self.name
         )

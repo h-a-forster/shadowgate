@@ -160,12 +160,23 @@ class SimulatedBackend:
 
     def cache_fingerprint(self) -> str:
         """Every parameter that affects completions (generative params, seed, pricing)."""
-        return repr((
-            "simulated", self.raw_name, self.skill, self.seed, self.overconfidence,
-            self.confidence_noise, self.discrimination, self.systematic_error,
-            repr(self.pricing), self.latency_s, self.latency_per_token_s,
-            self.emit_confidence, self.emit_logprobs,
-        ))
+        return repr(
+            (
+                "simulated",
+                self.raw_name,
+                self.skill,
+                self.seed,
+                self.overconfidence,
+                self.confidence_noise,
+                self.discrimination,
+                self.systematic_error,
+                repr(self.pricing),
+                self.latency_s,
+                self.latency_per_token_s,
+                self.emit_confidence,
+                self.emit_logprobs,
+            )
+        )
 
     # ------------------------------------------------------------------ draws
 
@@ -232,8 +243,13 @@ class SimulatedBackend:
         """Ground truth behind a request's completion (for tests and diagnostics)."""
         task = self.find_task(request)
         answer, correct, p, c = self._sample(task, request.n_sample)
-        return {"task_id": task.id, "answer": answer, "correct": correct, "p_correct": p,
-                "confidence": c}
+        return {
+            "task_id": task.id,
+            "answer": answer,
+            "correct": correct,
+            "p_correct": p,
+            "confidence": c,
+        }
 
     def _logprobs(self, task: Task, n_sample: int, c: float) -> tuple[float, ...]:
         out: list[float] = []
@@ -310,4 +326,3 @@ def _wrong_options(ref: str) -> list[str]:
     if flipped is not None:
         return [flipped.capitalize() if ref.strip()[:1].isupper() else flipped]
     return [f"not {ref}", *(d for d in _TEXT_DISTRACTORS if d != ref.strip().lower())]
-

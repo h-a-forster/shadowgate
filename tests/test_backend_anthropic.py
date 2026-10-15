@@ -299,8 +299,14 @@ def _sdk_objects() -> tuple[Any, Any]:
     return anthropic, (http_mod, request)
 
 
-def _status_exc(anthropic: Any, http_mod: Any, request: Any, cls_name: str, status: int,
-                headers: dict[str, str] | None = None) -> Exception:
+def _status_exc(
+    anthropic: Any,
+    http_mod: Any,
+    request: Any,
+    cls_name: str,
+    status: int,
+    headers: dict[str, str] | None = None,
+) -> Exception:
     try:
         response = http_mod.Response(status, headers=headers or {}, request=request)
         return getattr(anthropic, cls_name)("err", response=response, body=None)
@@ -358,9 +364,13 @@ def test_non_message_response_rejected(response: Any) -> None:
 
 
 def test_dict_message_response_accepted() -> None:
-    resp = {"type": "message", "model": "claude-haiku-5-5", "stop_reason": "end_turn",
-            "content": [{"type": "text", "text": "ok"}],
-            "usage": {"input_tokens": 1, "output_tokens": 1}}
+    resp = {
+        "type": "message",
+        "model": "claude-haiku-5-5",
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": "ok"}],
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
     b, _, _ = _backend([resp])
     assert b.complete(Request(prompt="x")).text == "ok"
 
@@ -381,8 +391,9 @@ def test_latency_is_final_attempt_only() -> None:
 
     client = SimpleNamespace(messages=SlowFail())
     sleeps: list[float] = []
-    b = AnthropicBackend("claude-haiku-5-5", client=client, sleep=sleeps.append,
-                         retry=RetryPolicy(max_attempts=3))
+    b = AnthropicBackend(
+        "claude-haiku-5-5", client=client, sleep=sleeps.append, retry=RetryPolicy(max_attempts=3)
+    )
     c = b.complete(Request(prompt="x"))
     assert client.messages.n == 2 and len(sleeps) == 1
     assert 0 <= c.latency_s < 0.4

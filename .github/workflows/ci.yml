@@ -29,6 +29,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --all-groups
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - name: typecheck
         run: uv run mypy
 

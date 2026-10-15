@@ -265,7 +265,9 @@ from shadowgate.extract import FinalLine
 from shadowgate.pricing import Pricing
 
 tasks = arithmetic(300, seed=0)
-fast = SimulatedBackend("fast", skill=8.0, tasks=tasks, overconfidence=0.1, pricing=Pricing(0.5, 2.5))
+fast = SimulatedBackend(
+    "fast", skill=8.0, tasks=tasks, overconfidence=0.1, pricing=Pricing(0.5, 2.5)
+)
 strong = SimulatedBackend("strong", skill=16.0, tasks=tasks, pricing=Pricing(5.0, 25.0))
 
 cascade = sg.Cascade(

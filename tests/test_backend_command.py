@@ -163,9 +163,7 @@ def test_env_and_cwd(tmp_path: Path) -> None:
     import os, sys
     sys.stdout.write(os.environ["SG_TEST_VAR"] + "|" + os.getcwd())
     """
-    b = CommandBackend(
-        _script(tmp_path, body), name="env", env={"SG_TEST_VAR": "v1"}, cwd=tmp_path
-    )
+    b = CommandBackend(_script(tmp_path, body), name="env", env={"SG_TEST_VAR": "v1"}, cwd=tmp_path)
     text = b.complete(Request(prompt="x")).text
     var, cwd = text.split("|", 1)
     assert var == "v1"

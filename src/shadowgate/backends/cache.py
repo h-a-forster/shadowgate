@@ -18,8 +18,17 @@ __all__ = ["CacheStore", "CachedBackend", "backend_fingerprint"]
 # Public, non-secret configuration that changes what a backend returns or what it costs.
 # Deliberately excludes api keys, ``api_key_env``, ``headers`` and ``env`` (may hold secrets).
 _FINGERPRINT_ATTRS = (
-    "model", "base_url", "pricing", "executable", "extra_args", "isolation_args",
-    "default_system", "command", "cwd", "path", "key_backend",
+    "model",
+    "base_url",
+    "pricing",
+    "executable",
+    "extra_args",
+    "isolation_args",
+    "default_system",
+    "command",
+    "cwd",
+    "path",
+    "key_backend",
 )
 
 
@@ -43,6 +52,7 @@ def backend_fingerprint(backend: Any) -> str:
     attrs = {a: _stable(getattr(backend, a)) for a in _FINGERPRINT_ATTRS if hasattr(backend, a)}
     blob = json.dumps(attrs, sort_keys=True, ensure_ascii=False, default=repr)
     return f"{type(backend).__qualname__}:{blob}"
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS completions (

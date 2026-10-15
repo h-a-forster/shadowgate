@@ -43,7 +43,7 @@ class FakeExtractor:
     def extract(self, text: str) -> str:
         for line in reversed(text.splitlines()):
             if line.startswith("ANSWER:"):
-                return line[len("ANSWER:"):].strip()
+                return line[len("ANSWER:") :].strip()
         return ""
 
 
@@ -254,9 +254,7 @@ def test_logprob_missing_and_prepare() -> None:
 def test_self_consistency_scores_and_requests() -> None:
     answers = {1: "4", 2: "5", 3: "4", 4: "?"}
     backend = FakeBackend(lambda r: f"ANSWER: {answers[r.n_sample]}")
-    est = conf.SelfConsistency(
-        comparator=FakeComparator(), extractor=FakeExtractor(), samples=4
-    )
+    est = conf.SelfConsistency(comparator=FakeComparator(), extractor=FakeExtractor(), samples=4)
     assert est.name == "self_consistency(k=4)"
     assert est.prepare(REQ) is REQ
     r = est.estimate(TASK, REQ, comp("ANSWER: 4"), "4", backend)
@@ -276,7 +274,9 @@ def test_self_consistency_scores_and_requests() -> None:
 def test_self_consistency_temperature_override_and_judge_calls() -> None:
     backend = FakeBackend("ANSWER: 4")
     est = conf.SelfConsistency(
-        comparator=FakeComparator(with_call=True), extractor=FakeExtractor(), samples=2,
+        comparator=FakeComparator(with_call=True),
+        extractor=FakeExtractor(),
+        samples=2,
         temperature=1.0,
     )
     r = est.estimate(TASK, REQ, comp("ANSWER: 4"), "4", backend)
@@ -457,8 +457,16 @@ def test_calibrated_interpolation_and_clamp() -> None:
 
 @pytest.mark.parametrize(
     "points",
-    [[], [[0.5, 0.1], [0.4, 0.2]], [[0.1, 0.1], [0.1, 0.2]], [[0.1, 0.5], [0.2, 0.4]],
-     [[0.1, 1.2]], [[0.1, -0.1]], [[0.1, 0.2, 0.3]], [[float("nan"), 0.1]]],
+    [
+        [],
+        [[0.5, 0.1], [0.4, 0.2]],
+        [[0.1, 0.1], [0.1, 0.2]],
+        [[0.1, 0.5], [0.2, 0.4]],
+        [[0.1, 1.2]],
+        [[0.1, -0.1]],
+        [[0.1, 0.2, 0.3]],
+        [[float("nan"), 0.1]],
+    ],
 )
 def test_calibrated_validation(points) -> None:
     with pytest.raises(ConfigError):

@@ -18,8 +18,9 @@ class BackendError(ShadowgateError):
     (rate limit, overload, timeout, connection) so callers can decide whether to resume later.
     """
 
-    def __init__(self, message: str, *, backend: str = "", status: int | None = None,
-                 retryable: bool = False) -> None:
+    def __init__(
+        self, message: str, *, backend: str = "", status: int | None = None, retryable: bool = False
+    ) -> None:
         super().__init__(message)
         self.backend = backend
         self.status = status

@@ -76,8 +76,9 @@ def _make_client(api_key_env: str, base_url: str | None, timeout_s: float) -> An
     try:
         return anthropic.Anthropic(**kwargs)
     except Exception as exc:  # noqa: BLE001 - SDK raises its own error types for bad config
-        raise ConfigError(f"anthropic backend: could not create client: {type(exc).__name__}") \
-            from None
+        raise ConfigError(
+            f"anthropic backend: could not create client: {type(exc).__name__}"
+        ) from None
 
 
 def classify_error(exc: BaseException, *, backend: str) -> Exception:

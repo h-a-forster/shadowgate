@@ -85,9 +85,7 @@ def _record_to_task(record: Any, where: str, *, from_csv: bool = False) -> tuple
 
     prompt_key = next((k for k in PROMPT_FIELDS if k in rec), None)
     if prompt_key is None:
-        raise DatasetError(
-            f"{where}: missing prompt (expected one of: {', '.join(PROMPT_FIELDS)})"
-        )
+        raise DatasetError(f"{where}: missing prompt (expected one of: {', '.join(PROMPT_FIELDS)})")
     prompt = rec.pop(prompt_key)
     if not isinstance(prompt, str):
         raise DatasetError(f"{where}: field {prompt_key!r} must be a string")
@@ -200,7 +198,9 @@ def load_tasks(path: str | Path, *, limit: int | None = None) -> list[Task]:
     for pos, (task, given, where) in enumerate(parsed, start=1):
         if not given:
             task = Task(
-                id=f"t{pos:0{width}d}", prompt=task.prompt, reference=task.reference,
+                id=f"t{pos:0{width}d}",
+                prompt=task.prompt,
+                reference=task.reference,
                 meta=task.meta,
             )
         if task.id in seen:
@@ -227,11 +227,54 @@ MAX_VALUE = 5000  # every intermediate quantity stays in [1, MAX_VALUE]
 MAX_STEPS = 12
 
 _NAMES = (
-    "Amara", "Ben", "Chen", "Diego", "Elif", "Farah", "Gabriel", "Hana", "Ivan", "Jamal",
-    "Keiko", "Liam", "Mei", "Nadia", "Omar", "Priya", "Quinn", "Rosa", "Sven", "Tariq",
-    "Uma", "Victor", "Wanjiru", "Xavier", "Yara", "Zoltan", "Aisha", "Bruno", "Chidi", "Dana",
-    "Emeka", "Fatima", "Goran", "Ingrid", "Jun", "Kofi", "Lucia", "Mateo", "Noor", "Olga",
-    "Pablo", "Rania", "Sanjay", "Tomas", "Ayesha", "Leilani", "Hiroshi", "Marta",
+    "Amara",
+    "Ben",
+    "Chen",
+    "Diego",
+    "Elif",
+    "Farah",
+    "Gabriel",
+    "Hana",
+    "Ivan",
+    "Jamal",
+    "Keiko",
+    "Liam",
+    "Mei",
+    "Nadia",
+    "Omar",
+    "Priya",
+    "Quinn",
+    "Rosa",
+    "Sven",
+    "Tariq",
+    "Uma",
+    "Victor",
+    "Wanjiru",
+    "Xavier",
+    "Yara",
+    "Zoltan",
+    "Aisha",
+    "Bruno",
+    "Chidi",
+    "Dana",
+    "Emeka",
+    "Fatima",
+    "Goran",
+    "Ingrid",
+    "Jun",
+    "Kofi",
+    "Lucia",
+    "Mateo",
+    "Noor",
+    "Olga",
+    "Pablo",
+    "Rania",
+    "Sanjay",
+    "Tomas",
+    "Ayesha",
+    "Leilani",
+    "Hiroshi",
+    "Marta",
 )
 
 # Each theme: opening (with {name} and {n}), the item noun (plural), add/sub phrasings, the
@@ -582,6 +625,7 @@ def arithmetic(
 
 
 # --------------------------------------------------------------------------- gsm8k
+
 
 def gsm8k(path: str | Path, *, limit: int | None = None) -> list[Task]:
     """Load a local GSM8K-format JSONL file (``{"question", "answer"}`` per line).

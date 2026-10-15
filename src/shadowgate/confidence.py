@@ -239,7 +239,11 @@ class Verbal:
         return dataclasses.replace(request, prompt=prompt)
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
@@ -273,7 +277,11 @@ class Logprob:
         return dataclasses.replace(request, want_logprobs=True)
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
@@ -347,7 +355,11 @@ class SelfConsistency:
             return exc
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
@@ -447,7 +459,11 @@ class Monitor:
         return request
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
@@ -516,7 +532,11 @@ class CallableEstimator:
         return request
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
@@ -568,9 +588,7 @@ class Combine:
             if weights is None:
                 raise ConfigError("combine: method 'weighted' requires 'weights'")
             if len(weights) != len(members):
-                raise ConfigError(
-                    f"combine: {len(weights)} weights for {len(members)} members"
-                )
+                raise ConfigError(f"combine: {len(weights)} weights for {len(members)} members")
             ws = [float(w) for w in weights]
             if any(w < 0 or math.isnan(w) for w in ws) or sum(ws) <= 0:
                 raise ConfigError("combine: weights must be non-negative with a positive sum")
@@ -590,7 +608,11 @@ class Combine:
         return request
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
@@ -647,9 +669,7 @@ class Calibrated:
     the ``x`` range are clamped to the first / last ``y``.
     """
 
-    def __init__(
-        self, base: ConfidenceEstimator, points: Sequence[Sequence[float]]
-    ) -> None:
+    def __init__(self, base: ConfidenceEstimator, points: Sequence[Sequence[float]]) -> None:
         pts: list[tuple[float, float]] = []
         for p in points:
             if len(p) != 2:
@@ -686,14 +706,21 @@ class Calibrated:
         return self.base.prepare(request)
 
     def estimate(
-        self, task: Task, request: Request, completion: Completion, answer: str,
+        self,
+        task: Task,
+        request: Request,
+        completion: Completion,
+        answer: str,
         backend: Backend,
     ) -> ConfidenceResult:
         if _is_empty(answer):
             return _empty_result(self.name)
         inner = self.base.estimate(task, request, completion, answer, backend)
-        detail: dict[str, Any] = {"base": inner.estimator, "raw_score": inner.score,
-                                  "base_detail": dict(inner.detail)}
+        detail: dict[str, Any] = {
+            "base": inner.estimator,
+            "raw_score": inner.score,
+            "base_detail": dict(inner.detail),
+        }
         score = None if inner.score is None else self.apply(inner.score)
         return ConfidenceResult(self.name, score, calls=inner.calls, detail=detail)
 
