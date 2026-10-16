@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
       # setup-uv no longer publishes floating major tags; Dependabot keeps this pin current.
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
       - name: Install
@@ -46,7 +46,7 @@ jobs:
         with:
           persist-credentials: false
       # setup-uv no longer publishes floating major tags; Dependabot keeps this pin current.
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
       - name: Build sdist and wheel
