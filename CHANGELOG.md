@@ -22,6 +22,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `experiments/mmlu-pro-cascade/claude_budget.py` reserves `SHADOWGATE_RESERVE_USD` for every
+  call in flight (tracked in `costs.jsonl.inflight.json`, with a TTL for reservations left by
+  crashed processes) instead of one reserve for all workers, so parallel workers can no longer
+  overshoot the cap by several whole calls. Locking now works on Windows (`msvcrt`) as well as
+  POSIX (`fcntl`), torn log lines are skipped, and `--version` passes straight through. The
+  published runs used the earlier guard; their spend ($58.06) stayed well below the $88 cap, so
+  no published result is affected.
 - Results docs report both statuses, all-in cost including audit spend, and the limitations of the
   published run (final tier 100% correct, CLI cost overhead, cached serve-run audits).
 - docs/results.md and the README lead with the MMLU-Pro and BBH results, where the final tier

@@ -14,3 +14,7 @@ runs/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+# claude_budget.py lock and in-flight reservation files
+*.jsonl.lock
+*.inflight.json
+*.inflight.json.*.tmp
