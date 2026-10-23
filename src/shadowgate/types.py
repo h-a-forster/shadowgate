@@ -153,7 +153,8 @@ class Completion:
     probabilities when the backend returned them. ``cached`` is True when served from the
     local response cache (cost and latency still report the original call's values).
     ``stop_reason`` is the provider's normalized stop reason ("end", "max_tokens", "refusal",
-    "stop_sequence", "error" or a provider-specific string).
+    "stop_sequence", "error" or a provider-specific string). ``meta`` carries backend-specific
+    provenance (for example the Claude Code CLI version and a hash of the prompt it was sent).
     """
 
     text: str
@@ -164,6 +165,7 @@ class Completion:
     stop_reason: str = "end"
     logprobs: tuple[float, ...] | None = None
     cached: bool = False
+    meta: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return _clean(self)
@@ -181,6 +183,7 @@ class Completion:
             stop_reason=d.get("stop_reason", "end"),
             logprobs=None if lp is None else tuple(float(x) for x in lp),
             cached=bool(d.get("cached", False)),
+            meta=dict(d.get("meta") or {}),
         )
 
 

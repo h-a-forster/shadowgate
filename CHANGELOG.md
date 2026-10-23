@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Completion.meta`: backend-specific provenance, serialized with the completion. The
+  claude-code backend records `prompt_sha256` (system prompt and stdin as sent) and
+  `cli_version` (from `--version`, probed once per backend). Decisions recorded before this
+  change have no `meta`; the published experiment files are unchanged.
 - `AuditSummary.audit_only_status`: when references drive the status, the status the audit
   disagreement alone would give. The report and `shadowgate audit` show it next to the
   reference-based status; the demo prints it as `audit-only status`.

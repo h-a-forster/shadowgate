@@ -117,6 +117,11 @@ the built-in price table for the model the CLI reports, the CLI's `total_cost_us
 every model's cost basis is known), otherwise unknown. On a subscription plan the dollar figure
 is notional: it is what the same tokens would cost at API prices.
 
+Each completion records provenance in its `meta` (stored in the ledger and exported decisions):
+`prompt_sha256`, a SHA-256 of the system prompt and stdin text exactly as sent, and
+`cli_version`, the first line of `<executable> --version`, probed once per backend after the
+first successful call and omitted if the probe fails.
+
 ### `type = "command"`
 
 Runs any program once per request. The prompt goes to stdin (the system prompt, if any, first,

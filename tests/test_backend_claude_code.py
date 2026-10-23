@@ -14,10 +14,12 @@ from shadowgate.backends.claude_code import (
     DEFAULT_ISOLATION_ARGS,
     DEFAULT_SYSTEM,
     ClaudeCodeBackend,
+    _delivered_system,
+    prompt_sha256,
 )
 from shadowgate.errors import BackendError, ConfigError
 from shadowgate.pricing import PRICES, Pricing, cost_of
-from shadowgate.types import Request, Usage
+from shadowgate.types import Completion, Request, Usage
 
 FIXTURE = Path(__file__).parent / "fixtures" / "claude_code_result.json"
 
@@ -29,6 +31,14 @@ FAKE_CLI = textwrap.dedent(
     cfg_path = sys.argv[1]
     with open(cfg_path, encoding="utf-8") as f:
         cfg = json.load(f)
+    if sys.argv[2:] == ["--version"]:
+        # Version probes are not logged as calls; "version_probes" counts them.
+        probe_path = cfg_path + ".probes"
+        n = int(open(probe_path).read()) if os.path.exists(probe_path) else 0
+        with open(probe_path, "w") as f:
+            f.write(str(n + 1))
+        print(cfg.get("version", "9.9.9 (Claude Code)"))
+        sys.exit(cfg.get("version_exit", 0))
     log_path = cfg_path + ".log"
     calls = []
     if os.path.exists(log_path):
@@ -87,8 +97,14 @@ class FakeCli:
         self.script.write_text(FAKE_CLI, encoding="utf-8")
         self.cfg = tmp_path / "cfg.json"
 
-    def respond(self, *responses: dict[str, Any]) -> None:
-        self.cfg.write_text(json.dumps({"responses": list(responses)}), encoding="utf-8")
+    def respond(self, *responses: dict[str, Any], **extra: Any) -> None:
+        cfg = {"responses": list(responses), **extra}
+        self.cfg.write_text(json.dumps(cfg), encoding="utf-8")
+
+    @property
+    def version_probes(self) -> int:
+        path = Path(str(self.cfg) + ".probes")
+        return int(path.read_text()) if path.exists() else 0
 
     @property
     def executable(self) -> list[str]:
@@ -511,3 +527,58 @@ def test_resolve_cost_reports_basis(cli: FakeCli) -> None:
     assert b.resolve_cost({"total_cost_usd": 1.0}, u, "nope")[1].startswith("cli:")
     assert b.resolve_cost({}, u, "nope") == (None, "unknown")
     assert cli.backend(pricing=Pricing(1.0, 1.0)).resolve_cost({}, u, "nope")[1] == "override"
+
+
+# --------------------------------------------------------------------------- provenance
+
+
+def test_meta_records_prompt_hash_and_cli_version(cli: FakeCli) -> None:
+    cli.respond({"stdout": _result(result="a")}, version="2.1.7 (Claude Code)")
+    b = cli.backend()
+    first = b.complete(Request(prompt="Q1"))
+    second = b.complete(Request(prompt="Q2", system="Be brief."))
+    assert first.meta == {
+        "prompt_sha256": prompt_sha256(DEFAULT_SYSTEM, "Q1"),
+        "cli_version": "2.1.7 (Claude Code)",
+    }
+    assert second.meta["prompt_sha256"] == prompt_sha256("Be brief.", "Q2")
+    assert second.meta["prompt_sha256"] != first.meta["prompt_sha256"]
+    assert cli.version_probes == 1  # probed once per backend
+    assert len(cli.calls) == 2  # the probe is not a model call
+
+
+def test_prompt_hash_without_system_prompt(cli: FakeCli) -> None:
+    cli.respond({"stdout": _result()})
+    comp = cli.backend(default_system=None).complete(Request(prompt="Q"))
+    assert comp.meta["prompt_sha256"] == prompt_sha256(None, "Q")
+
+
+def test_failed_version_probe_is_omitted_and_not_retried(cli: FakeCli) -> None:
+    cli.respond({"stdout": _result()}, version="", version_exit=3)
+    b = cli.backend()
+    assert "cli_version" not in b.complete(Request(prompt="Q")).meta
+    assert "cli_version" not in b.complete(Request(prompt="Q")).meta
+    assert cli.version_probes == 1
+
+
+def test_failed_call_does_not_probe_version(cli: FakeCli) -> None:
+    cli.respond({"stdout": _error_result("bad request")})
+    with pytest.raises(BackendError):
+        cli.backend().complete(Request(prompt="Q"))
+    assert cli.version_probes == 0
+
+
+def test_delivered_system_reads_inline_and_file(tmp_path: Path) -> None:
+    path = tmp_path / "sys.txt"
+    text = "line1\r\nline2 é"
+    path.write_bytes(text.encode("utf-8"))
+    assert _delivered_system(["claude", "--system-prompt", "S", "--x"]) == "S"
+    assert _delivered_system(["claude", "--system-prompt-file", str(path)]) == text
+    assert _delivered_system(["claude", "-p"]) is None
+    assert _delivered_system(["claude", "--system-prompt"]) is None
+
+
+def test_completion_meta_round_trips() -> None:
+    comp = Completion(text="x", model="m", meta={"cli_version": "1.0", "prompt_sha256": "ab"})
+    assert Completion.from_dict(comp.to_dict()) == comp
+    assert Completion.from_dict({"text": "x", "model": "m"}).meta == {}
