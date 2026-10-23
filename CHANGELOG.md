@@ -26,6 +26,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `CachedBackend` coalesces concurrent misses for the same key: one thread calls the inner
+  backend and the others reuse its stored completion, so identical requests in flight at the
+  same time are paid for once instead of racing.
 - `experiments/mmlu-pro-cascade/claude_budget.py` reserves `SHADOWGATE_RESERVE_USD` for every
   call in flight (tracked in `costs.jsonl.inflight.json`, with a TTL for reservations left by
   crashed processes) instead of one reserve for all workers, so parallel workers can no longer

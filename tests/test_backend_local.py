@@ -215,14 +215,59 @@ def test_cache_concurrent_threads(tmp_path: Path) -> None:
     assert len(store) == 50
     for req, res in zip(reqs, results, strict=True):
         assert res.text == f"echo {req.prompt} #0"
-    # Each prompt is computed at least once; races may compute a few twice, never 800 times.
-    assert 50 <= inner.calls < 800
+    # Concurrent misses for the same prompt are coalesced: each prompt is computed once.
+    assert inner.calls == 50
     before = inner.calls
     with ThreadPoolExecutor(max_workers=8) as pool:
         again = list(pool.map(cb.complete, reqs))
     assert inner.calls == before
     assert all(r.cached for r in again)
     store.close()
+
+
+def test_cache_coalesces_identical_in_flight_requests() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    class Slow:
+        name = "slow"
+
+        def complete(self, request: Request) -> Completion:
+            calls.append(request.prompt)
+            started.set()
+            assert release.wait(10)
+            return Completion(text="done", model="m", cost_usd=0.5)
+
+    cb = CachedBackend(Slow(), CacheStore(":memory:"))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(cb.complete, Request(prompt="same")) for _ in range(6)]
+        assert started.wait(10)
+        release.set()
+        results = [f.result(timeout=10) for f in futures]
+    assert calls == ["same"]
+    assert sum(not r.cached for r in results) == 1
+    assert all(r.text == "done" and r.cost_usd == 0.5 for r in results)
+    assert cb._inflight == {}
+
+
+def test_cache_coalescing_retries_after_leader_error() -> None:
+    attempts = []
+
+    class FlakyOnce:
+        name = "flaky"
+
+        def complete(self, request: Request) -> Completion:
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise BackendError("down", backend="flaky")
+            return Completion(text="ok", model="m")
+
+    cb = CachedBackend(FlakyOnce(), CacheStore(":memory:"))
+    with pytest.raises(BackendError):
+        cb.complete(Request(prompt="x"))
+    assert cb.complete(Request(prompt="x")).text == "ok"
+    assert cb._inflight == {}
 
 
 class Configured(Counting):
