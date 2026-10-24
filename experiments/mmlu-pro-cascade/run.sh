@@ -3,7 +3,8 @@
 # Needs a logged-in Claude Code CLI, shadowgate installed, and a clone of
 # github.com/TIGER-AI-Lab/MMLU-Pro (see make_tasks.py). Every CLI call goes through
 # claude-budget (claude_budget.py), which logs the CLI's reported cost to costs.jsonl and
-# refuses calls past SHADOWGATE_BUDGET_USD (default 88).
+# refuses calls past SHADOWGATE_BUDGET_USD (default 88), holding a per-call reserve
+# (SHADOWGATE_RESERVE_USD, default 0.25) for every call in flight.
 # Eval runs make ~5000 calls (~$47 CLI-reported, pilot included); serve runs are response-cache
 # hits. The pilot has eval runs for both pairs and a serve run for Haiku -> Opus only, as in the
 # committed decisions-pilot-*.jsonl.

@@ -16,12 +16,14 @@ the working directory), or in-band at the top of stdin when even that path is no
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import shutil
 import tempfile
+import threading
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -69,6 +71,11 @@ _SHIM_SAFE_PATH = re.compile(r"[A-Za-z0-9 _.:\\/~-]+")
 _UNTRUSTED_COST_BASES = frozenset({"", "unknown"})
 _UNRECOGNIZED_MODEL_MARK = "unrecognized_model"
 
+# ``claude --version`` is run once per backend (after the first successful call) with this
+# timeout; its first output line, truncated, is recorded as ``Completion.meta["cli_version"]``.
+_VERSION_TIMEOUT_S = 30.0
+_MAX_VERSION_CHARS = 120
+
 _STOP_REASONS = {
     "end_turn": "end",
     "max_tokens": "max_tokens",
@@ -112,6 +119,27 @@ def _parse_result(stdout: str) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
+def prompt_sha256(system: str | None, prompt: str) -> str:
+    """SHA-256 of the system prompt and stdin text exactly as delivered to the CLI."""
+    payload = json.dumps([system, prompt], ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _delivered_system(argv: Sequence[str]) -> str | None:
+    """The system prompt carried by ``argv`` (inline or via a file), or None for the default."""
+    for flag in ("--system-prompt", "--system-prompt-file"):
+        if flag in argv[:-1]:
+            value = argv[list(argv).index(flag) + 1]
+            if flag == "--system-prompt":
+                return value
+            try:
+                with open(value, encoding="utf-8", newline="") as f:
+                    return f.read()
+            except OSError:
+                return None
+    return None
+
+
 def _int(d: Mapping[str, Any], key: str) -> int:
     try:
         return int(d.get(key) or 0)
@@ -141,6 +169,11 @@ class ClaudeCodeBackend:
     priced at 2x base input in steps 1-2. ``latency_s`` is the wall time of the final, successful
     CLI run (failed attempts and backoff sleeps excluded). ``timeout_s`` bounds each run; on
     expiry the CLI and every process it started are killed.
+
+    ``Completion.meta`` records provenance: ``prompt_sha256`` (the system prompt and stdin text
+    as delivered, see :func:`prompt_sha256`) and ``cli_version`` (the first line of
+    ``<executable> --version``, probed once after the first successful call; omitted when the
+    probe fails).
     """
 
     def __init__(
@@ -174,6 +207,9 @@ class ClaudeCodeBackend:
         self.name = name or f"claude-code:{model}"
         self.env = dict(env) if env is not None else None
         self.pricing = pricing
+        self._version_lock = threading.Lock()
+        self._version_probed = False
+        self._cli_version: str | None = None
 
     # ------------------------------------------------------------------ helpers
 
@@ -239,6 +275,28 @@ class ClaudeCodeBackend:
             f.write(text)
         return path
 
+    def cli_version(self) -> str | None:
+        """Return the CLI's ``--version`` output (first line), probing it at most once."""
+        with self._version_lock:
+            if not self._version_probed:
+                self._version_probed = True
+                self._cli_version = self._probe_version()
+            return self._cli_version
+
+    def _probe_version(self) -> str | None:
+        env = None if self.env is None else {**os.environ, **self.env}
+        try:
+            argv, _ = self._resolve()
+            proc = run_process([*argv, "--version"], input=b"", timeout=_VERSION_TIMEOUT_S, env=env)
+        except (BackendError, ProcessTimeout, OSError) as exc:
+            log.debug("%s: could not read the CLI version: %s", self.name, exc)
+            return None
+        lines = proc.stdout.decode("utf-8", errors="replace").strip().splitlines()
+        if proc.returncode != 0 or not lines or not lines[0].strip():
+            log.debug("%s: CLI --version exited %s", self.name, proc.returncode)
+            return None
+        return lines[0].strip()[:_MAX_VERSION_CHARS]
+
     def _error(self, message: str, status: int | None) -> Exception:
         msg = _tail(message) or "no output"
         if status in (401, 403) or _AUTH_RE.search(msg):
@@ -264,6 +322,7 @@ class ClaudeCodeBackend:
         ):
             # The system-prompt file lives outside the (empty) working directory.
             argv, stdin_text = self.build_command(request, scratch_dir=scratch)
+            digest = prompt_sha256(_delivered_system(argv), stdin_text)
             with Timer() as timer:
                 try:
                     proc = run_process(
@@ -316,6 +375,10 @@ class ClaudeCodeBackend:
             model = str(next(iter(model_usage)))
         cost, basis = self.resolve_cost(data, usage, model, write_1h=write_1h, stderr=stderr)
         log.debug("%s: cost_usd=%s (basis: %s)", self.name, cost, basis)
+        meta: dict[str, Any] = {"prompt_sha256": digest}
+        version = self.cli_version()
+        if version is not None:
+            meta["cli_version"] = version
         return Completion(
             text=text,
             model=model,
@@ -323,6 +386,7 @@ class ClaudeCodeBackend:
             cost_usd=cost,
             latency_s=timer.elapsed,
             stop_reason=str(stop_reason),
+            meta=meta,
         )
 
     def resolve_cost(

@@ -133,6 +133,10 @@ class CachedBackend:
     completion with ``cached=True`` (cost and latency are the original call's). Exceptions
     propagate and completions with ``stop_reason == "error"`` are not stored. ``name`` is the
     inner backend's name, so ledgers are unaffected.
+
+    Concurrent misses for the same key are coalesced: one thread calls the inner backend and the
+    others wait for it and then read its stored completion, so identical requests in flight at
+    the same time are paid for once.
     """
 
     def __init__(self, inner: Backend, store: CacheStore) -> None:
@@ -141,6 +145,9 @@ class CachedBackend:
         self.name = inner.name
         self.enabled = bool(getattr(inner, "cacheable", True))
         self._fingerprint = backend_fingerprint(inner) if self.enabled else ""
+        # key -> [lock, number of threads using it]; entries are removed when unused.
+        self._inflight: dict[str, list[Any]] = {}
+        self._inflight_guard = threading.Lock()
 
     def key(self, request: Request) -> str:
         base = request_key(self.inner.name, request)
@@ -153,7 +160,21 @@ class CachedBackend:
         hit = self.store.get(key)
         if hit is not None:
             return hit
-        completion = self.inner.complete(request)
-        if completion.stop_reason != "error":
-            self.store.put(key, self.inner.name, completion)
-        return completion
+        with self._inflight_guard:
+            entry = self._inflight.setdefault(key, [threading.Lock(), 0])
+            entry[1] += 1
+        try:
+            with entry[0]:
+                # Another thread may have completed this request while we waited.
+                hit = self.store.get(key)
+                if hit is not None:
+                    return hit
+                completion = self.inner.complete(request)
+                if completion.stop_reason != "error":
+                    self.store.put(key, self.inner.name, completion)
+                return completion
+        finally:
+            with self._inflight_guard:
+                entry[1] -= 1
+                if entry[1] == 0:
+                    del self._inflight[key]

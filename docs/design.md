@@ -147,7 +147,8 @@ Backend` builds one from a config table: `{"type": "anthropic"|"openai"|"claude-
   free text goes on the command line (the system prompt goes through `--system-prompt-file`).
   Timeouts kill the whole process tree. Cost order: `pricing` override, then the price table
   (1-hour cache writes at 2x input), then the CLI's `total_cost_usd` only when the CLI recognized
-  the model; otherwise None. Name: `claude-code:<model>`.
+  the model; otherwise None. `Completion.meta` records `prompt_sha256` (system prompt and stdin
+  as sent) and `cli_version` (`--version`, probed once per backend). Name: `claude-code:<model>`.
 * **CommandBackend(command, \*, name=None, timeout_s=600, retry=None, pricing=None,
   retryable_exit_codes=(), cwd=None, env=None)** - prompt on stdin (system prompt, if any,
   prepended with a blank line); stdout is the text. A non-zero exit is a `BackendError`,
