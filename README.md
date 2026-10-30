@@ -197,7 +197,7 @@ Claude Code CLI for $58 of CLI-reported cost.
 | Served by Haiku alone | 80.0% | 80.0% |
 | Haiku error on those, vs gold | 9.3% (7.9-11.0) | 9.3% (7.9-11.0) |
 | Haiku disagreement with the final tier on those | 6.1% (4.9-7.5) | 4.5% (3.5-5.7) |
-| Audit-only estimate (~465 weighted audits) | 5.1% (3.1-7.8) | 4.1% (2.3-6.6) |
+| Audit-only estimate (weighted; 462 and 471 audits) | 5.1% (3.1-7.8) | 4.1% (2.3-6.6) |
 | Haiku errors the final tier shared (audit cannot see them) | 44% | 61% |
 | Saving vs final tier alone: serving / with audit | 72% / 45% | 69% / 41% |
 

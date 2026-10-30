@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-30
+
 ### Added
 
 - `Completion.meta`: backend-specific provenance, serialized with the completion. The
@@ -79,5 +81,6 @@ Initial release.
   smoke test. Tagged releases attach the wheel and sdist to a GitHub release.
 - Stdlib-only runtime; Python 3.11+. Installed from GitHub; not published on PyPI.
 
-[Unreleased]: https://github.com/h-a-forster/shadowgate/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/h-a-forster/shadowgate/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/h-a-forster/shadowgate/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/h-a-forster/shadowgate/releases/tag/v0.1.0
