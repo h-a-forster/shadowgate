@@ -192,10 +192,14 @@ def test_timeout_with_grandchild_is_enforced(tmp_path: Path, child_sleep: str) -
         b.complete(Request(prompt="x"))
     elapsed = time.monotonic() - t0
     assert ei.value.retryable is True and "timed out" in str(ei.value)
-    assert elapsed < 1.0 + 4.0, elapsed
+    # timeout + taskkill (over 1 s on some Windows hosts) + 2 s drain grace + start-up; the
+    # hang this guards against lasts 30 s.
+    assert elapsed < 1.0 + 9.0, elapsed
 
 
 def test_latency_is_final_attempt_only(tmp_path: Path) -> None:
+    import time
+
     body = """
     import pathlib, sys, time
     marker = pathlib.Path(sys.argv[1])
@@ -207,6 +211,10 @@ def test_latency_is_final_attempt_only(tmp_path: Path) -> None:
     """
     cmd = [*_script(tmp_path, body, name="flaky.py"), str(tmp_path / "marker")]
     b = CommandBackend(cmd, name="flaky", retry=FAST_RETRY, retryable_exit_codes=[75])
+    t0 = time.monotonic()
     comp = b.complete(Request(prompt="x"))
+    elapsed = time.monotonic() - t0
     assert comp.text == "ok"
-    assert comp.latency_s < 0.6
+    # Relative bound: process startup alone can exceed 0.6 s on slow hosts. The failed first
+    # attempt spent at least 0.6 s, so the final attempt's latency must leave that out.
+    assert comp.latency_s <= elapsed - 0.6, (comp.latency_s, elapsed)
