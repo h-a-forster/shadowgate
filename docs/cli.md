@@ -33,7 +33,7 @@ Set `SHADOWGATE_DEBUG=1` to print tracebacks. Otherwise errors are one line on s
 | Code | Meaning |
 |---|---|
 | 0 | Success. |
-| 1 | Runtime error (including a malformed import file), or a run stopped after repeated failures. |
+| 1 | Runtime error (including a malformed import file), a run stopped after repeated failures, or a run in which every task failed. |
 | 2 | Usage or configuration error: bad arguments, config, task file, or missing ledger. |
 | 3 | Audit breach with `--fail-on-breach`. |
 | 4 | A run stopped because it reached its spending cap. |
@@ -103,14 +103,17 @@ shadowgate run -c CONFIG -t TASKS [--ledger PATH] [--run-id ID] [--mode {serve,e
 | `--mode` | `serve` | `serve`: stop at the first tier whose confidence clears its threshold and sample audits. `eval`: run every tier on every task. |
 | `--limit N` | all | First N tasks only. |
 | `--workers N` | `[run] workers` (4) | Tasks in flight. |
-| `--max-cost USD` | `[run] max_cost_usd` | Spending cap (serving + audit). Exit 4 when reached. |
+| `--max-cost USD` | `[run] max_cost_usd` | Spending cap (serving + audit), a finite number >= 0. Exit 4 when reached. |
 | `--no-resume` | off | Re-route tasks already recorded under this run id. |
 | `-q`, `--quiet` | off | Print only the final summary. |
 
 Each decision is written to the ledger as soon as it finishes. Re-running with the same
 `--run-id` (and the same `--mode`) skips tasks already recorded. Without `--run-id`, every
 invocation starts a new run. On a budget stop, interrupt or failure streak, the command prints
-the exact resume command.
+the exact resume command. If tasks failed, it prints how many and the first error. Resuming with
+changed `[backends]`, `[[tiers]]`, `[answer]` or `[audit]` settings prints a warning: recorded
+decisions keep the old settings, new ones use the changed settings, and the run's stored config
+is replaced.
 
 ## `audit`
 
@@ -132,8 +135,8 @@ always using the final tier, a per-confidence-bin table and caveats.
 | `--fail-on-breach` | off | Exit 3 when the status is `breach`. |
 | `--run-pending` | off | First run deferred audits (`[audit] mode = "deferred"`), then summarize. |
 | `-c`, `--config` | | Config used to build the audit tier. Required with `--run-pending`, rejected without it. |
-| `--workers N` | `[run] workers` | With `--run-pending`. |
-| `--max-cost USD` | `[run] max_cost_usd` | With `--run-pending`. |
+| `--workers N` | `[run] workers` | Only with `--run-pending`; rejected without it. |
+| `--max-cost USD` | `[run] max_cost_usd` | Only with `--run-pending`; rejected without it. |
 
 Status values:
 
@@ -166,8 +169,8 @@ AUROC, AURC) for each non-final tier.
 | `--run-id ID` | latest eval-mode run | |
 | `--objective` | `max-savings` | See below. |
 | `--max-drop X` | `0.01` | For `max-savings`: allowed accuracy drop below the best single tier. |
-| `--min-accuracy X` | | Required for `min-accuracy`. |
-| `--budget X` | | USD per task, for `max-accuracy`. |
+| `--min-accuracy X` | | Required for `min-accuracy`; in [0, 1]. |
+| `--budget X` | | USD per task (>= 0), for `max-accuracy`. |
 | `--holdout F` | `0.3` | Held-out share. `0` disables validation. |
 | `--seed S` | `0` | Split seed. |
 | `--level L` | `0.95` | Interval confidence level. |

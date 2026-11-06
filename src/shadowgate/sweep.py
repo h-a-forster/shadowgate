@@ -680,8 +680,12 @@ def sweep(
         raise ValueError("objective 'min-accuracy' needs min_accuracy")
     if not 0.0 <= holdout < 1.0:
         raise ValueError(f"holdout must be in [0, 1), got {holdout!r}")
-    if max_accuracy_drop < 0:
+    if not max_accuracy_drop >= 0:  # written so that NaN is rejected too
         raise ValueError(f"max_accuracy_drop must be >= 0, got {max_accuracy_drop!r}")
+    if min_accuracy is not None and not 0.0 <= min_accuracy <= 1.0:
+        raise ValueError(f"min_accuracy must be in [0, 1], got {min_accuracy!r}")
+    if budget_per_task is not None and not budget_per_task >= 0:
+        raise ValueError(f"budget_per_task must be >= 0, got {budget_per_task!r}")
 
     tiers, usable, n_skipped = _collect(list(decisions))
     notes: list[str] = []

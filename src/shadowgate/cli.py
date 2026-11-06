@@ -49,7 +49,7 @@ EXIT_INTERRUPTED = 130
 
 EXIT_CODES: dict[int, str] = {
     EXIT_OK: "success",
-    EXIT_RUNTIME: "runtime error, or a run stopped after repeated failures",
+    EXIT_RUNTIME: "runtime error, or a run that stopped after repeated failures or failed entirely",
     EXIT_USAGE: "usage or configuration error (bad arguments, config, task file, missing ledger)",
     EXIT_BREACH: "audit breach with --fail-on-breach",
     EXIT_BUDGET: "a run stopped because it reached its spending cap",
@@ -631,6 +631,23 @@ def _print_demo_summary(summary: AuditSummary, sw: SweepResult, threshold: float
 # --------------------------------------------------------------------------- run
 
 
+def _check_run_limits(args: argparse.Namespace) -> None:
+    if args.workers is not None and args.workers < 1:
+        raise UsageError("--workers must be >= 1")
+    if args.max_cost is not None and not (args.max_cost >= 0 and math.isfinite(args.max_cost)):
+        raise UsageError(f"--max-cost must be a finite number >= 0, got {args.max_cost}")
+
+
+def _changed_sections(stored: Mapping[str, Any], snapshot: Mapping[str, Any]) -> list[str]:
+    """Sections that decide answers or audits and differ from a run's stored config snapshot."""
+    from .ledger import redact_config
+
+    if not stored:  # imported without a run header: nothing to compare against
+        return []
+    new = redact_config(snapshot)
+    return [k for k in ("backends", "tiers", "answer", "audit") if stored.get(k) != new.get(k)]
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     from .config import load_config
     from .datasets import load_tasks
@@ -638,10 +655,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     if args.limit is not None and args.limit < 0:
         raise UsageError("--limit must be >= 0")
-    if args.workers is not None and args.workers < 1:
-        raise UsageError("--workers must be >= 1")
-    if args.max_cost is not None and args.max_cost < 0:
-        raise UsageError("--max-cost must be >= 0")
+    _check_run_limits(args)
     cfg = load_config(args.config)
     tasks = load_tasks(args.tasks, limit=args.limit)
     if not tasks:
@@ -668,6 +682,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
             while run_id in existing:  # never resume a run implicitly
                 run_id, k = f"{base}-{k}", k + 1
         resuming = run_id in existing and not args.no_resume
+        if resuming and existing[run_id].n_decisions:
+            changed = _changed_sections(existing[run_id].config, cfg.snapshot())
+            if changed:
+                _err(
+                    f"shadowgate: warning: resuming run {run_id} with a changed config "
+                    f"({', '.join(changed)}): recorded decisions keep the old settings, new "
+                    "ones use these, and the run's stored config is replaced; use a new "
+                    "--run-id to keep the run uniform"
+                )
         if not args.quiet:
             verb = "resuming" if resuming else "starting"
             _out(
@@ -691,6 +714,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         finally:
             progress.close()
         pending = sum(1 for _ in ledger.pending_audits(run_id))
+        first_error = None
+        if stats.failed:
+            first_error = next((d.error for d in ledger.decisions(run_id) if d.error), None)
 
     _out(f"run {run_id}: {stats.summary_line()}")
     resume_cmd = f"shadowgate run -c {args.config} -t {args.tasks} --run-id {run_id}"
@@ -699,8 +725,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.ledger:
         resume_cmd += f" --ledger {args.ledger}"
     ledger_opt = f" --ledger {args.ledger}" if args.ledger else ""
-    if stats.failed and not stats.stopped:
-        _err(f"shadowgate: warning: {stats.failed} task(s) failed; see the ledger for details")
+    if first_error is not None:
+        _err(f"shadowgate: warning: {stats.failed} task(s) failed; first: {first_error[:300]}")
     if stats.stopped:
         reason = {
             "budget": f"spending cap of ${max_cost} reached",
@@ -717,6 +743,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
         nxt = "sweep" if args.mode == "eval" else "audit"
         _out(f"next: shadowgate {nxt} --run-id {run_id}{ledger_opt}")
+    if not stats.stopped and stats.completed and stats.failed == stats.completed:
+        return EXIT_RUNTIME
     return _stop_exit_code(stats.stopped)
 
 
@@ -726,8 +754,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def _cmd_audit(args: argparse.Namespace) -> int:
     if args.run_pending:
         return _audit_run_pending(args)
-    if args.config:
-        raise UsageError("-c/--config is only used with --run-pending")
+    for flag, value in (
+        ("-c/--config", args.config),
+        ("--workers", args.workers),
+        ("--max-cost", args.max_cost),
+    ):
+        if value is not None:
+            raise UsageError(f"{flag} is only used with --run-pending")
     ledger_path = Path(args.ledger) if args.ledger else DEFAULT_LEDGER
     with _open_ledger(ledger_path) as ledger:
         run_id = _resolve_run(ledger, args.run_id)
@@ -757,6 +790,7 @@ def _audit_run_pending(args: argparse.Namespace) -> int:
 
     if not args.config:
         raise UsageError("--run-pending needs -c/--config to build the audit tier")
+    _check_run_limits(args)
     cfg = load_config(args.config)
     ledger_path = Path(args.ledger) if args.ledger else cfg.settings.ledger_path
     with _open_ledger(ledger_path) as ledger:

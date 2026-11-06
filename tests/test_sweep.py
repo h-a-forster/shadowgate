@@ -443,6 +443,22 @@ def test_undecided_counted_as_incorrect():
     assert any("undecidable" in n for n in res.notes)
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_accuracy_drop": math.nan},
+        {"objective": "min-accuracy", "min_accuracy": math.nan},
+        {"objective": "min-accuracy", "min_accuracy": 95.0},
+        {"objective": "max-accuracy", "budget_per_task": math.nan},
+        {"objective": "max-accuracy", "budget_per_task": -0.01},
+    ],
+)
+def test_rejects_unusable_targets(kwargs):
+    # These used to end in "no recommendation", which reads like a property of the data.
+    with pytest.raises(ValueError):
+        sw.sweep(example2(), holdout=0, **kwargs)
+
+
 def test_rejects_serve_mode():
     with pytest.raises(ValueError, match="--mode eval"):
         sweep(example2(mode="serve"))

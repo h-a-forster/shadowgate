@@ -267,6 +267,62 @@ def test_run_budget_stop_exit_code(
     assert "resume with" in captured.err and "--run-id r-budget" in captured.err
 
 
+@pytest.mark.parametrize("value", ["nan", "inf", "-1"])
+def test_run_rejects_unusable_spending_cap(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str], value: str
+) -> None:
+    # NaN compares false with everything, so a NaN cap would silently never stop the run.
+    run_id = f"r-cap-{value}"
+    code = main(["run", *_common(workspace), "--run-id", run_id, "--max-cost", value, "-q"])
+    assert code == cli.EXIT_USAGE
+    assert "--max-cost" in capsys.readouterr().err
+    with Ledger(workspace["ledger"]) as led:
+        assert run_id not in {r.run_id for r in led.runs()}
+
+
+def test_resume_warns_when_routing_config_changed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "sim.toml"
+    config.write_text(DEMO_CONFIG, encoding="utf-8")
+    tasks = tmp_path / "tasks.jsonl"
+    save_tasks(arithmetic(6, seed=1), tasks)
+    ledger = tmp_path / "ledger.sqlite"
+    args = ["run", "-c", str(config), "-t", str(tasks), "--ledger", str(ledger), "--run-id", "r"]
+
+    assert main([*args, "--limit", "3", "-q"]) == 0
+    assert main([*args, "--limit", "4", "-q"]) == 0  # same config: no warning
+    assert "warning" not in capsys.readouterr().err
+
+    config.write_text(DEMO_CONFIG.replace("threshold = 0.55", "threshold = 0.9"), encoding="utf-8")
+    assert main([*args, "-q"]) == 0
+    assert "(tiers)" in capsys.readouterr().err
+
+
+def test_run_in_which_every_task_failed_exits_nonzero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "failing.toml"
+    config.write_text(
+        f"""
+        [backends.broken]
+        type = "command"
+        command = [{json.dumps(sys.executable)}, "-c", "import sys; sys.exit('no such model')"]
+        max_attempts = 1
+
+        [[tiers]]
+        name = "only"
+        backend = "broken"
+        """,
+        encoding="utf-8",
+    )
+    tasks = tmp_path / "tasks.jsonl"
+    save_tasks(arithmetic(3), tasks)
+    args = ["run", "-c", str(config), "-t", str(tasks), "--ledger", str(tmp_path / "l.sqlite")]
+    assert main([*args, "-q"]) == cli.EXIT_RUNTIME
+    assert "no such model" in capsys.readouterr().err
+
+
 def test_run_config_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     bad = tmp_path / "bad.toml"
     bad.write_text(DEMO_CONFIG.replace('backend = "slow"', 'backend = "slwo"'), encoding="utf-8")
@@ -411,6 +467,23 @@ def test_audit_run_pending_needs_config(
 ) -> None:
     assert main(["audit", "--run-pending", "--ledger", str(workspace["ledger"])]) == 2
     assert "-c/--config" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("option", [["--workers", "2"], ["--max-cost", "1"]])
+def test_audit_rejects_run_options_without_run_pending(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str], option: list[str]
+) -> None:
+    assert main(["audit", "--ledger", str(workspace["ledger"]), *option]) == cli.EXIT_USAGE
+    assert option[0] in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("option", [["--workers", "0"], ["--max-cost", "nan"]])
+def test_audit_run_pending_validates_limits(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str], option: list[str]
+) -> None:
+    args = ["-c", str(workspace["config"]), "--ledger", str(workspace["ledger"]), *option]
+    assert main(["audit", "--run-pending", *args]) == cli.EXIT_USAGE
+    assert option[0] in capsys.readouterr().err
 
 
 # --------------------------------------------------------------------------- sweep
