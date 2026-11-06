@@ -6,11 +6,11 @@
   final-tier error, all    5.0% (3.4%-7.2%)
   cheap-tier error, all    8.8% (6.7%-11.6%)
   AUROC cheap correct      0.836  (agrees with final 0.859, n 520)
-  serve audit              127 of 466 audited; weighted disagreement 2.7% (0.5%-7.6%), audit-only status inconclusive
+  serve audit              127 of 466 audited; weighted disagreement 2.7% (1.0%-6.3%), audit-only status inconclusive
   reference-graded         5.4% (3.7%-7.8%), status inconclusive
   cost/task (recorded)      final only $0.01424; serving $0.00204 + audit $0.00346 = $0.00551
   saving vs final only     serving 85.6%, all-in 61.3%
-  coverage (5000 seeds)    mean est 3.24%, audits 122.1; covers disagreement 99.9% (MC SE 0.03%), covers error 98.4% (MC SE 0.18%); status {'inconclusive': 0.9942, 'ok': 0.0058}
+  coverage (5000 seeds)    mean est 3.24%, audits 122.1; covers disagreement 98.9% (MC SE 0.15%), covers error 80.9% (MC SE 0.56%); status {'inconclusive': 0.8718, 'ok': 0.1282}
 
 == haiku -> sonnet  (520 tasks, threshold 0.8)
   skipped cases            466 (89.6%)
@@ -20,9 +20,9 @@
   final-tier error, all    5.8% (4.1%-8.1%)
   cheap-tier error, all    8.8% (6.7%-11.6%)
   AUROC cheap correct      0.836  (agrees with final 0.860, n 520)
-  serve audit              122 of 466 audited; weighted disagreement 0.8% (0.0%-4.8%), audit-only status ok
+  serve audit              122 of 466 audited; weighted disagreement 0.8% (0.2%-3.5%), audit-only status ok
   reference-graded         5.4% (3.7%-7.8%), status inconclusive
   cost/task (recorded)      final only $0.00733; serving $0.00129 + audit $0.00171 = $0.00299
   saving vs final only     serving 82.5%, all-in 59.1%
-  coverage (5000 seeds)    mean est 2.80%, audits 122.1; covers disagreement 100.0% (MC SE 0.00%), covers error 97.1% (MC SE 0.24%); status {'inconclusive': 0.9858, 'ok': 0.0142}
+  coverage (5000 seeds)    mean est 2.80%, audits 122.1; covers disagreement 99.5% (MC SE 0.10%), covers error 68.7% (MC SE 0.66%); status {'inconclusive': 0.7864, 'ok': 0.2136}
 

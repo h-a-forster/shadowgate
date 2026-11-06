@@ -17,8 +17,10 @@
 
 ## Proposed
 
-- The audit interval accounts for the finite population, so it stops over-covering (99.8-100%
-  against 95% nominal) when about a third of skipped cases are audited.
+- The audit interval is closer to 95% at low disagreement counts: it still covers 98.9-100% on
+  BBH and arithmetic, where 3-15 skipped cases disagree.
+- `svg.py` (1,505 lines of hand-rolled charts) stops being a maintenance liability, by tests on
+  its output or a smaller scope.
 - Repeated audit checks have a valid status (an anytime-valid confidence sequence), so
   monitoring a growing run no longer needs a stricter fixed `--level`.
 - The `choice` extractor returns no answer for hedged lines such as `ANSWER: A, C, D`, so a

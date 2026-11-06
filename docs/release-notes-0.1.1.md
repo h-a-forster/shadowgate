@@ -11,6 +11,18 @@ Full list of changes: [CHANGELOG.md](../CHANGELOG.md).
   4.1% (Sonnet) disagreement: 44-61% of its errors were shared by the final tier and are
   invisible to an audit. See [docs/results.md](results.md).
 
+## Audit interval
+
+- Sampled audit intervals now account for sampling without replacement from the run's skipped
+  cases. On the published runs the old interval covered the true disagreement 99.8-100% of the time
+  at nominal 95%; the new one covers about 96% on MMLU-Pro and 98.9-99.5% on BBH, where few cases
+  disagree. `inconclusive` fell from 94.5-99.4% of re-drawn audits to 73.8-90.9%, and
+  `audits_to_resolve` from 2124 to 734 on the MMLU-Pro Sonnet run. Intervals, audit-only statuses
+  in simulation and planning counts change; point estimates do not. The interval describes this
+  run's skipped cases, not future traffic. A census (eval mode) keeps the ordinary interval.
+- `weighted_proportion(..., finite=True)` and `stats.FiniteSample`; the audit uses them. Audit
+  estimates report method `hajek-korn-graubard-fpc`, and `n_eff` can now exceed the audit count.
+
 ## Library
 
 - `AuditSummary.audit_only_status`: the status the audit alone would give when references

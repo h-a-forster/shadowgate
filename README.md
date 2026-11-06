@@ -13,13 +13,13 @@ notional; see [Results](#results) and the [limitations](https://github.com/h-a-f
 
 - **A shadow audit against a stronger model measures disagreement, not error.** Haiku's error on
   the cases it served alone was 9.3% against gold labels, but its disagreement with Opus on those
-  cases was 6.1%, and the audit-only estimate was 5.1% (3.1-7.8). 44% of Haiku's errors were
+  cases was 6.1%, and the audit-only estimate was 5.1% (3.8-6.8). 44% of Haiku's errors were
   shared by Opus (61% for Sonnet) and are invisible to the audit
   ([details](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#error-against-disagreement-on-the-skipped-cases)).
 - **A weaker reference makes the cheap tier look better.** Against Sonnet, disagreement was 4.5%
-  and audit-only 4.1% (2.3-6.6) for the same 9.3% gold-graded error. Re-drawn 5000 times, the
-  audit's interval covered the gold-graded error 38.6% of the time with Opus and 0.8% with Sonnet,
-  but covered the true disagreement 99.8-99.9% ([coverage check](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#coverage-check-offline-5000-seeds)).
+  and audit-only 4.1% (2.9-5.7) for the same 9.3% gold-graded error. Re-drawn 5000 times, the
+  audit's interval covered the gold-graded error 10.9% of the time with Opus and 0.04% with Sonnet,
+  but covered the true disagreement about 96% ([coverage check](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#coverage-check-offline-5000-seeds)).
 - **The cascade trades a little accuracy for a large cost saving.** Haiku -> Opus scored 88.1%
   against 91.2% for Opus alone and 83.0% for Haiku alone, saving 72% serving cost and 45% once
   the audit is paid for; Haiku -> Sonnet saved 69% and 41% ([accuracy and cost](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#accuracy-and-cost)).
@@ -31,7 +31,7 @@ notional; see [Results](#results) and the [limitations](https://github.com/h-a-f
 - **A threshold tuned on one domain does not transfer, and the audit is slow to notice.** A
   threshold tuned on STEM (0.88, 3.3% error) gave 12.3% error on the humanities questions Haiku
   served alone; with about 41 audits the audit never said `ok` but confirmed the breach in only
-  8-11% of draws ([drift check](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#drift-check-offline-threshold-set-on-stem-served-on-humanities)).
+  17-25% of draws ([drift check](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#drift-check-offline-threshold-set-on-stem-served-on-humanities)).
 
 ## Why
 
@@ -70,7 +70,7 @@ shadowgate demo: 400 simulated arithmetic tasks (seed 0); fast tier skill 8.5 (o
 Serve mode: confidence threshold 0.55, stratified shadow audits
   escalation rate         35.0% [30.5%, 39.8%]
   answered by fast tier   260 decisions, 89 shadow-audited by 'slow'
-  disagreement on skipped 10.8% [5.1%, 19.4%] (weighted by 1/pi)
+  disagreement on skipped 10.8% [7.5%, 15.8%] (weighted by 1/pi)
   error on skipped        12.3% [8.9%, 16.9%] (vs references)
   served accuracy         92.0% [88.9%, 94.3%]
   cost per task           $0.000379
@@ -85,7 +85,7 @@ Eval mode: every tier on every task, threshold sweep
   recommended threshold   0.89 -> accuracy 99.2% [95.4%, 99.9%], cost/task $0.000487 (held-out n=120)
   cost vs slow-only       -41.9%
 
-The fast tier reports 95% mean confidence on the answers it keeps; the audit estimates 11% of them disagree with the slow tier (95% CI 5-19%), more than the 5% its confidence implies.
+The fast tier reports 95% mean confidence on the answers it keeps; the audit estimates 11% of them disagree with the slow tier (95% CI 7-16%), more than the 5% its confidence implies.
 ```
 
 The demo config sets the threshold too low on purpose. The fast tier answers 65% of tasks without
@@ -197,7 +197,7 @@ Claude Code CLI for $58 of CLI-reported cost.
 | Served by Haiku alone | 80.0% | 80.0% |
 | Haiku error on those, vs gold | 9.3% (7.9-11.0) | 9.3% (7.9-11.0) |
 | Haiku disagreement with the final tier on those | 6.1% (4.9-7.5) | 4.5% (3.5-5.7) |
-| Audit-only estimate (weighted; 462 and 471 audits) | 5.1% (3.1-7.8) | 4.1% (2.3-6.6) |
+| Audit-only estimate (weighted; 462 and 471 audits) | 5.1% (3.8-6.8) | 4.1% (2.9-5.7) |
 | Haiku errors the final tier shared (audit cannot see them) | 44% | 61% |
 | Saving vs final tier alone: serving / with audit | 72% / 45% | 69% / 41% |
 
@@ -207,14 +207,15 @@ Savings are notional: Haiku is costed from the price table and Opus/Sonnet from 
 reported `total_cost_usd`, which includes CLI prompt overhead (see
 [results](docs/results.md)).
 
-The audit tracks disagreement, conservatively: re-drawn 5000 times offline, its interval covered
-the true disagreement rate 99.8-99.9% of the time, above the 95% nominal level, partly because the
-interval ignores the finite-population correction with about a third of skipped cases audited. It
-covered the gold-graded error only 38.6% (Opus) and 0.8% (Sonnet) of the time, because the final
+The audit tracks disagreement: re-drawn 5000 times offline, its 95% interval covered the true
+disagreement rate of the run's skipped cases about 96% of the time on MMLU-Pro (98.9-99.5% on BBH,
+where few cases disagree). An earlier interval that ignored the finite population covered 99.8-100%
+([correction](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#coverage-check-offline-5000-seeds)).
+It covered the gold-graded error only 10.9% (Opus) and 0.04% (Sonnet) of the time, because the final
 tier repeats many of Haiku's mistakes. A weaker final tier repeats more of them and makes the
 cheap tier look better. On BBH, the Haiku ->
-Sonnet audit reported `ok` against a 5% tolerance (0.8%, upper bound 4.8%) while the gold-graded
-error was 5.4% (3.7-7.8). That `ok` was mostly a lucky draw (1.4% of re-draws); the lasting point
+Sonnet audit reported `ok` against a 5% tolerance (0.8%, upper bound 3.5%) while the gold-graded
+error was 5.4% (3.7-7.8). An `ok` came up in 21.4% of re-draws; the lasting point
 is that the audit cannot see errors the final tier shares.
 
 Some of that gap is probably label noise. In 13 hand-checked MMLU-Pro cases (drawn with two ad hoc
@@ -225,7 +226,7 @@ on MMLU-Pro. Do not read it as error.
 
 A drift check (offline): a threshold tuned on STEM questions (0.88, 3.3% error) gave 12.3% error
 on the humanities questions Haiku served alone. At that volume (~41 audits) the audit never said
-`ok`, but it confirmed the breach in only 8-11% of re-draws.
+`ok`, but it confirmed the breach in only 17-25% of re-draws.
 
 An earlier run on generated arithmetic, where Opus was 100% correct, is also in the results
 document. Setup, BBH numbers, coverage, drift and limitations:
@@ -259,7 +260,7 @@ Questions this data raises. The decisions, configs and analysis for each are com
 - **How well do confidence gates hold across domains?** The STEM threshold broke on humanities.
   Compare `verbal`, `self_consistency` and `calibrated` signals (`src/shadowgate/confidence.py`)
   per subject, using the `calibrate` and `sweep` commands (`src/shadowgate/sweep.py`).
-- **How should audit effort follow drift?** About 41 audits caught the humanities breach in 8-11%
+- **How should audit effort follow drift?** About 41 audits caught the humanities breach in 17-25%
   of draws. Stratifying by subject or confidence band (`strata` in `[audit]`,
   `src/shadowgate/audit.py`) is untested against this drift scenario.
 - **How much of the gap is label noise?** The 13-case hand check had one reviewer and two ad hoc

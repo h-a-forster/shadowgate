@@ -132,10 +132,18 @@ p̂ = Σ (yᵢ / πᵢ) / Σ (1 / πᵢ)      over audited cases, yᵢ = 1 if th
 ```
 
 which is consistent for the disagreement rate over all skipped cases (Horvitz & Thompson, 1952;
-Hájek, 1971). The interval is a Clopper-Pearson interval evaluated at an effective sample size
-`n_eff` (Korn & Graubard), where `n_eff` is the smaller of Kish's effective size and a
-variance-matched size. Unequal weights shrink `n_eff` below the number of audits, so the
-interval is wider than an unweighted one would be.
+Hájek, 1971). The interval is a Korn-Graubard beta interval matched to the design variance, with
+two adjustments. Audits are drawn without replacement from a known set of skipped cases, so each
+audit's variance carries a factor 1 - πᵢ: the more of a stratum is audited, the less is left
+unknown. And each bound adds one hypothetical audit of mean weight (a disagreement for the upper
+bound, an agreement for the lower), because disagreements missed in a heavily weighted stratum
+would otherwise make the interval too narrow on the side that hides them. Unequal weights widen
+the interval and sampling a large share narrows it, so the reported `n_eff` (the smaller of the
+Kish and variance-matched sizes, with the same factors) can exceed the number of audits.
+
+The interval is about the skipped cases of this run, not future traffic: at π = 1 nothing about
+this run is unknown, though the next run can differ. A run where every case is audited (eval mode)
+has no sampling error, so it keeps the ordinary interval, which describes the process.
 
 Why the floor must be positive: a case with π = 0 can never be audited, so no weighting can
 recover its error rate. If the floor is very small, the few audits in that band carry large
@@ -163,7 +171,7 @@ Status: BREACH - Skipped-case error vs references exceeds tolerance 5%: the lowe
   above it.
 
 The fast tier (fast) answered 65% of 400 tasks without escalating. On those, it disagrees with slow
-  on an estimated 10.8% (95% CI 5.1-19.4%, 89 audits, n_eff 84). Against reference answers, the
+  on an estimated 10.8% (95% CI 7.5-15.8%, 89 audits, n_eff 124). Against reference answers, the
   skipped cases are wrong on 12.3% (95% CI 8.9-16.9%, 260 graded). That is about 32.0 wrong answers
   among the 260 skipped cases (23.0-43.8).
 
@@ -177,11 +185,11 @@ The fast tier (fast) answered 65% of 400 tasks without escalating. On those, it 
 
 By confidence bin:
   bin            skipped  audited  disagreement (CI)           error vs refs (CI)
-  [0.50, 0.70)        13        7  100% (59.0-100.0%)          100% (77.2-100.0%)
-  [0.70, 0.80)        15        9  77.8% (40.0-97.2%)          86.7% (62.1-96.3%)
-  [0.80, 0.90)         6        4  75.0% (19.4-99.4%)          66.7% (30.0-90.3%)
+  [0.50, 0.70)        13        7  100% (70.3-100.0%)          100% (77.2-100.0%)
+  [0.70, 0.80)        15        9  77.8% (51.1-92.9%)          86.7% (62.1-96.3%)
+  [0.80, 0.90)         6        4  75.0% (32.9-96.2%)          66.7% (30.0-90.3%)
   [0.90, 0.95)         3        0  -                           33.3% (6.1-79.2%)
-  [0.95, 1.00]       223       69  0% (0.0-5.2%)               0.45% (0.1-2.5%)
+  [0.95, 1.00]       223       69  0% (0.0-4.5%)               0.45% (0.1-2.5%)
 ```
 
 | Field | Meaning |
@@ -208,7 +216,7 @@ error rate uses all 260 graded skipped cases. Keep references for at least a cal
 The status uses the error rate when every skipped case has a reference, otherwise the
 disagreement rate. `inconclusive` means the interval still contains the tolerance; the output
 estimates how many more audits (or, when every skipped case is already graded, more tasks) would
-move it to `ok` or `breach` if the observed rate holds.
+move it to `ok` or `breach` if the observed rate holds and the audit rates stay as they are.
 
 ## Choosing a tolerance and an audit rate
 

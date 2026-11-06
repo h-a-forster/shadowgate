@@ -363,6 +363,58 @@ def test_weighted_monte_carlo_bias_and_coverage():
     assert 0.90 <= coverage <= 0.99, coverage
 
 
+def _hypergeometric_bounds(k: int, big_n: int, n: int, level: float) -> tuple[int, int]:
+    """Exact equal-tailed bounds on the population count, by inverting the hypergeometric."""
+    half = (1.0 - level) / 2.0
+
+    def cdf(x: int, d: int) -> float:
+        below = sum(math.comb(d, i) * math.comb(big_n - d, n - i) for i in range(x + 1))
+        return below / math.comb(big_n, n)
+
+    lo = 0
+    while k > 0 and 1.0 - cdf(k - 1, lo) <= half:
+        lo += 1
+    hi = big_n
+    while cdf(k, hi) <= half:
+        hi -= 1
+    return lo, hi
+
+
+@pytest.mark.parametrize(
+    ("big_n", "n", "k"),
+    [
+        (1344, 455, 28),
+        (466, 122, 4),
+        (181, 51, 1),
+        (1000, 300, 15),
+        (1000, 500, 250),
+        (100, 50, 10),
+    ],
+)
+def test_finite_equal_weights_track_the_exact_hypergeometric_interval(
+    big_n: int, n: int, k: int
+) -> None:
+    est = weighted_proportion([i < k for i in range(n)], [big_n / n] * n, finite=True)
+    lo, hi = _hypergeometric_bounds(k, big_n, n, 0.95)
+    assert est.lo is not None and est.hi is not None
+    assert abs(est.lo * big_n - lo) <= 1.1
+    assert abs(est.hi * big_n - hi) <= 1.1
+
+
+def test_finite_interval_edge_cases() -> None:
+    assert weighted_proportion([True, False], [1.0, 1.0], finite=True) == weighted_proportion(
+        [True, False], [1.0, 1.0]
+    )
+    none = weighted_proportion([False] * 4, [4.0, 4.0, 2.0, 2.0], finite=True)
+    assert none.lo == 0.0 and none.hi is not None and 0.0 < none.hi < 1.0
+    every = weighted_proportion([True] * 4, [4.0, 4.0, 2.0, 2.0], finite=True)
+    assert every.hi == 1.0 and every.lo is not None and 0.0 < every.lo < 1.0
+    with pytest.raises(ValueError):
+        weighted_proportion([True, False], [0.5, 2.0], finite=True)
+    with pytest.raises(ValueError):
+        weighted_proportion([True, False], [2.0, 2.0], method="wilson", finite=True)
+
+
 # ---------------------------------------------------------------------------- required_n
 
 

@@ -54,17 +54,25 @@ Conventions
   hi <= tolerance, else ``inconclusive``; ``no-data`` when the metric has no observations;
   ``n/a`` when no tolerance is given. When references drive the status, ``audit_only_status``
   gives the status the disagreement alone would yield (what a run without references would
-  report), so the two can be compared. The weighted interval is Korn-Graubard (Clopper-Pearson at
-  the effective sample size, see :func:`~shadowgate.stats.weighted_proportion`).
+  report), so the two can be compared. The weighted interval is a Korn-Graubard interval with
+  finite-population factors (see ``finite`` in :func:`~shadowgate.stats.weighted_proportion`).
+* **What the audit interval describes.** A sampled audit's interval is about the skipped cases
+  of this run, a finite population, and it narrows as more of them are audited. It is not an
+  interval for future traffic, for which the sample is what matters and the unaudited share
+  of this run is irrelevant. A census (every pi = 1, as in eval mode) has no sampling error, so
+  it keeps the ordinary interval, which does describe the process, as the reference-graded
+  Wilson intervals do.
 * **Fixed-sample status.** The status uses a fixed-sample confidence interval. Checking it
   repeatedly as audits accumulate and stopping at the first ``ok`` (optional stopping) inflates
   the chance of a false ``ok``. Fix the number of audits in advance, or use a stricter ``level``
   (e.g. 0.99) when the status is checked repeatedly.
 * **Resolving an inconclusive status.** ``audits_to_resolve`` estimates the additional audits
-  needed if the rate holds. It is None when more audits cannot help: when the status uses
-  ``skipped_error`` (every skipped case is already graded) or every skipped case is already
-  audited (pi = 1). ``tasks_to_resolve`` estimates the additional skipped cases (tasks answered by
-  the fast path alone) needed in every inconclusive case, at the current audit rate.
+  needed if the rate holds and the design is unchanged, so they arrive with new traffic at the
+  current audit rates and the population grows with them. It is None when more audits cannot
+  help: when the status uses ``skipped_error`` (every skipped case is already graded) or every
+  skipped case is already audited (pi = 1). ``tasks_to_resolve`` estimates the additional skipped
+  cases (tasks answered by the fast path alone) needed in every inconclusive case, at the current
+  audit rate.
 * **Confidence bins.** Edges ``bins`` define half-open bins ``[e_i, e_{i+1})``; the last bin is
   closed. Scores below the first edge fall into the first bin, scores above the last edge into
   the last bin. Skipped cases without a score (None/NaN, only possible with hand-built records)
@@ -81,6 +89,7 @@ from dataclasses import dataclass
 
 from shadowgate.stats import (
     Estimate,
+    FiniteSample,
     mean_ci,
     regularized_beta,
     weighted_bounds,
@@ -355,7 +364,10 @@ def _bin_summary(
     audited = [c for c in cases if c.state == "audited" and c.weight is not None]
     graded = [c for c in cases if c.wrong is not None]
     dis = weighted_proportion(
-        [bool(c.disagree) for c in audited], [c.weight for c in audited if c.weight], level
+        [bool(c.disagree) for c in audited],
+        [c.weight for c in audited if c.weight],
+        level,
+        finite=True,
     )
     err = wilson(sum(1 for c in graded if c.wrong), len(graded), level) if graded else None
     return BinSummary(lo, hi, len(cases), len(audited), dis, err, label, len(graded))
@@ -390,7 +402,9 @@ def _clears(p: float, m: float, tolerance: float, level: float, family: str) -> 
     return regularized_beta(tolerance, x + 1.0, m - x) >= 1.0 - half_alpha
 
 
-def _extra_to_resolve(est: Estimate, tolerance: float, level: float) -> int | None:
+def _extra_to_resolve(
+    est: Estimate, tolerance: float, level: float, sample: FiniteSample | None = None
+) -> int | None:
     """Extra observations for the interval to clear ``tolerance``, assuming p stays put.
 
     Finds the smallest effective size m at which the interval family that is reported (Wilson,
@@ -398,6 +412,8 @@ def _extra_to_resolve(est: Estimate, tolerance: float, level: float) -> int | No
     unlike the Wald planning formula of :func:`~shadowgate.stats.required_n` this handles p near
     0 or 1 and the interval's asymmetry. m is converted to observations with the current design
     effect n / n_eff, assumed constant as observations are added (drawn under the same design).
+    With ``sample`` (a sampled, finite-population estimate) the search is instead over how many
+    times the current audits' worth of data is needed, on the interval itself.
     Returns None when p equals the tolerance or more than 10^7 observations would be needed.
     """
     p = est.value
@@ -405,6 +421,19 @@ def _extra_to_resolve(est: Estimate, tolerance: float, level: float) -> int | No
         return None
     family = _interval_family(est)
     cap = 1e7
+    if sample is not None and not sample.census:
+        lo, hi = 1.0, 2.0
+        while not sample.clears(tolerance, level, hi):
+            lo, hi = hi, hi * 2.0
+            if hi * sample.n > cap:
+                return None
+        while hi - lo > 1e-3 * hi:
+            mid = (lo + hi) / 2.0
+            if sample.clears(tolerance, level, mid):
+                hi = mid
+            else:
+                lo = mid
+        return max(1, math.ceil(hi * sample.n - 1e-9) - sample.n)
     lo, hi = 0.5, 1.0
     while not _clears(p, hi, tolerance, level, family):
         hi *= 2.0
@@ -577,7 +606,7 @@ def summarize(
     audit_tier_error: Estimate | None = None
     if audited:
         ys = [bool(c.disagree) for c in audited]
-        disagreement = weighted_proportion(ys, weights, level)
+        disagreement = weighted_proportion(ys, weights, level, finite=True)
         disagreement_unweighted = wilson(sum(ys), len(ys), level)
         ref_graded = [
             (c.ref_wrong, c.weight)
@@ -585,8 +614,12 @@ def summarize(
             if c.ref_wrong is not None and c.weight is not None
         ]
         if ref_graded:
+            # 1/w is the observed share of a stratum only when every completed audit is graded.
             audit_tier_error = weighted_proportion(
-                [g for g, _ in ref_graded], [w for _, w in ref_graded], level
+                [g for g, _ in ref_graded],
+                [w for _, w in ref_graded],
+                level,
+                finite=len(ref_graded) == n_audited,
             )
 
     graded_skipped = [c for c in cases if c.wrong is not None]
@@ -718,7 +751,10 @@ def summarize(
             metric, float(tolerance), block_ok=metric_name == "disagreement" and bool(sparse)
         )
         if status == "inconclusive":
-            extra = _extra_to_resolve(metric, float(tolerance), level)
+            sample = None
+            if metric_name == "disagreement":
+                sample = FiniteSample.of([bool(c.disagree) for c in audited], weights)
+            extra = _extra_to_resolve(metric, float(tolerance), level, sample)
             if extra is not None and metric.n > 0:
                 # Each extra skipped case yields metric.n / n_skipped observations at the
                 # current audit (or grading) rate.

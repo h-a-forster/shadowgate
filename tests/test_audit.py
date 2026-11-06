@@ -272,14 +272,14 @@ def test_final_tier_unknown_treats_all_as_skipped() -> None:
 # --------------------------------------------------------------------------- serve mode
 
 
-def test_serve_uniform_pi_matches_clopper_pearson() -> None:
+def test_serve_uniform_pi_is_inside_clopper_pearson() -> None:
     ds = mixed_serve(17, 3, pi=0.2)
     s = summarize(ds)
-    ref = clopper_pearson(3, 20)
+    ref = clopper_pearson(3, 20)  # with replacement: 20% of the population was observed
     assert s.mode == "serve" and s.n_skipped == 20 and s.n_audited == 20
     assert s.disagreement is not None
     assert s.disagreement.value == pytest.approx(0.15)
-    assert s.disagreement.lo == pytest.approx(ref.lo) and s.disagreement.hi == pytest.approx(ref.hi)
+    assert ref.lo < s.disagreement.lo < 0.15 < s.disagreement.hi < ref.hi
     assert s.disagreement_unweighted is not None
     assert s.disagreement_unweighted.value == pytest.approx(0.15)
 
@@ -293,7 +293,7 @@ def test_serve_weighted_disagreement_by_hand() -> None:
     assert s.disagreement is not None
     assert s.disagreement.value == pytest.approx(expected)
     ys = [k < 4 for k in range(8)] + [k < 1 for k in range(10)]
-    ref = weighted_proportion(ys, [1.25] * 8 + [10.0] * 10)
+    ref = weighted_proportion(ys, [1.25] * 8 + [10.0] * 10, finite=True)
     assert s.disagreement == ref
     assert s.disagreement_unweighted is not None
     assert s.disagreement_unweighted.value == pytest.approx(5 / 18)
@@ -486,13 +486,10 @@ def test_audits_to_resolve_is_roughly_enough() -> None:
     assert base.status == "inconclusive"
     extra = base.audits_to_resolve
     assert extra is not None
-    n_total = 20 + extra
-    k = round(0.2 * n_total)
-    more = summarize(mixed_serve(n_total - k, k), tolerance=0.1)
-    assert more.status == "breach"
-    fewer_total = max(21, (20 + n_total) // 2)
-    kf = round(0.2 * fewer_total)
-    assert summarize(mixed_serve(fewer_total - kf, kf), tolerance=0.1).status == "inconclusive"
+    k = math.ceil((20 + extra) / 5)  # whole fifths, so p stays exactly 0.2
+    assert summarize(mixed_serve(4 * k, k), tolerance=0.1).status == "breach"
+    k = math.floor((19 + extra) / 5)
+    assert summarize(mixed_serve(4 * k, k), tolerance=0.1).status == "inconclusive"
 
 
 def test_audits_to_resolve_zero_disagreement() -> None:
@@ -501,6 +498,43 @@ def test_audits_to_resolve_zero_disagreement() -> None:
     extra = s.audits_to_resolve
     assert extra is not None and extra > 0
     assert summarize(mixed_serve(10 + extra, 0), tolerance=0.1).status == "ok"
+
+
+def test_audits_to_resolve_counts_the_sampling_fraction() -> None:
+    # 30% of 1000 skipped cases audited, 7% disagree. The plan keeps the 30% rate, so its audits
+    # are worth 1 / 0.7 with-replacement audits each.
+    def run(audits: int) -> AuditSummary:
+        n = round(audits / 0.3)
+        hits = round(audits * 0.07)
+        ds = [skipped(k, pi=0.3, equivalent=k >= hits) for k in range(audits)]
+        ds += [skipped(f"n{k}", pi=0.3, status="skipped") for k in range(n - audits)]
+        return summarize(ds, tolerance=0.05)
+
+    base = run(300)
+    assert base.status == "inconclusive"
+    extra = base.audits_to_resolve
+    assert extra is not None
+    assert run(round(1.03 * (300 + extra))).status == "breach"
+    assert run(round(0.97 * (300 + extra))).status == "inconclusive"
+
+
+def test_audit_interval_coverage_is_near_nominal_without_replacement() -> None:
+    # Two strata sampled at 0.5 and 0.2, as the published runs are, re-drawn through summarize.
+    pop = [(0.5, k < 15) for k in range(150)] + [(0.2, k < 15) for k in range(500)]
+    done = [skipped(i, pi=pi, equivalent=not y) for i, (pi, y) in enumerate(pop)]
+    left = [skipped(i, pi=pi, status="skipped") for i, (pi, _) in enumerate(pop)]
+    truth = 30 / len(pop)
+    rng = random.Random(11)
+    reps = 400
+    covered = missed_high = 0
+    for _ in range(reps):
+        ds = [d if rng.random() < pi else u for (pi, _), d, u in zip(pop, done, left, strict=True)]
+        est = summarize(ds).disagreement
+        assert est is not None and est.lo is not None and est.hi is not None
+        covered += est.lo <= truth <= est.hi
+        missed_high += est.hi < truth
+    assert 0.93 <= covered / reps <= 0.985  # the with-replacement interval covers about 0.995
+    assert missed_high / reps <= 0.04  # a false "ok" is the costly miss
 
 
 def test_audits_to_resolve_accounts_for_design_effect() -> None:
@@ -761,7 +795,9 @@ def test_nonresponse_reweighted_within_pi_stratum_by_hand() -> None:
     assert s.disagreement is not None
     assert s.disagreement.value == pytest.approx((1 * 2 + 2 * 125) / (50 * 2 + 4 * 125))
     ref = weighted_proportion(
-        [k < 1 for k in range(50)] + [k < 2 for k in range(4)], [2.0] * 50 + [125.0] * 4
+        [k < 1 for k in range(50)] + [k < 2 for k in range(4)],
+        [2.0] * 50 + [125.0] * 4,
+        finite=True,
     )
     assert s.disagreement == ref
     assert s.n_unrepresented == 0
@@ -871,7 +907,7 @@ def test_continuous_pi_grouped_into_quantile_strata() -> None:
     ds = [skipped(k, pi=pi_of(k), equivalent=k % 4 != 0) for k in range(60)]
     s = summarize(ds)
     ys = [k % 4 == 0 for k in range(60)]
-    assert s.disagreement == weighted_proportion(ys, [1 / pi_of(k) for k in range(60)])
+    assert s.disagreement == weighted_proportion(ys, [1 / pi_of(k) for k in range(60)], finite=True)
     # Half the audits of the lowest-pi group pending: survivors there get weight 2/pi.
     pending = {1, 3, 5, 7, 9, 11}
     ds2 = [
@@ -881,7 +917,7 @@ def test_continuous_pi_grouped_into_quantile_strata() -> None:
     s2 = summarize(ds2)
     kept = [k for k in range(60) if k not in pending]
     ws = [(2.0 if k < 12 else 1.0) / pi_of(k) for k in kept]
-    assert s2.disagreement == weighted_proportion([k % 4 == 0 for k in kept], ws)
+    assert s2.disagreement == weighted_proportion([k % 4 == 0 for k in kept], ws, finite=True)
 
 
 # --------------------------------------------------------------------------- resolving

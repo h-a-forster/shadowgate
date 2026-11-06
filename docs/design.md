@@ -359,11 +359,14 @@ class Estimate:
 def wilson(k: int, n: int, level=0.95) -> Estimate
 def clopper_pearson(k: int, n: int, level=0.95) -> Estimate         # exact; beta quantiles by bisection on the regularized incomplete beta
 def weighted_proportion(ys: Sequence[bool], weights: Sequence[float], level=0.95,
-                        method="korn-graubard") -> Estimate
+                        method="korn-graubard", *, finite=False) -> Estimate
     # Hajek ratio estimator; linearized variance; n_eff = min(Kish, variance-matched);
     # CI = Korn-Graubard (Clopper-Pearson with x = p*n_eff of n_eff, non-integer, via the
     # regularized incomplete beta; equals clopper_pearson() when weights are equal) or
-    # method="wilson" (Wilson at n_eff; equals wilson() when weights are equal)
+    # method="wilson" (Wilson at n_eff; equals wilson() when weights are equal);
+    # finite=True (what audits use): weights are 1/pi of a without-replacement sample, the target
+    # is that finite population, variance terms carry 1 - pi_i, and each bound adds one
+    # mean-weight pseudo-observation; a census (all weights 1) keeps the ordinary interval
 def mean_ci(xs, level=0.95) -> Estimate                               # normal approximation (no t)
 def bootstrap_ci(stat: Callable[[Sequence[int]], float], n: int, *, reps=2000, level=0.95, seed=0) -> tuple[float, float]
     # resamples indices; stat receives index list; percentile interval

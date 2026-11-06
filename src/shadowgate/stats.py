@@ -52,6 +52,7 @@ from shadowgate.errors import InsufficientData
 __all__ = [
     "Bin",
     "Estimate",
+    "FiniteSample",
     "aurc",
     "auroc",
     "bootstrap_ci",
@@ -394,11 +395,91 @@ def clopper_pearson(k: int, n: int, level: float = 0.95) -> Estimate:
 WEIGHTED_METHODS = ("korn-graubard", "wilson")
 
 
+@dataclass(frozen=True)
+class FiniteSample:
+    """A weighted sample drawn without replacement, reduced to what its interval needs.
+
+    Weights are inverse inclusion probabilities w_i = 1/pi_i >= 1, so each audit's contribution to
+    the Hajek variance carries the unit-level finite-population factor 1 - pi_i, which turns
+    w_i^2 into w_i(w_i - 1). ``var_hits`` and ``var_misses`` sum that over the units with y = 1
+    and y = 0.
+
+    ``scale`` everywhere means the same design observed ``scale`` times as long: every sum grows
+    by that factor and the pseudo-observation below does not. It is how audit planning asks what
+    the interval would be with more audits at the same rates, without a separate approximation.
+    """
+
+    n: int
+    weight: float  # sum of w
+    weight_hits: float  # sum of w over y = 1
+    var_hits: float
+    var_misses: float
+
+    @classmethod
+    def of(cls, ys: Sequence[bool], weights: Sequence[float]) -> FiniteSample:
+        if any(w < 1.0 for w in weights):
+            raise ValueError("weights of a finite sample are 1/pi, so they must be >= 1")
+        return cls(
+            len(ys),
+            math.fsum(weights),
+            math.fsum(w for w, y in zip(weights, ys, strict=True) if y),
+            math.fsum(w * (w - 1.0) for w, y in zip(weights, ys, strict=True) if y),
+            math.fsum(w * (w - 1.0) for w, y in zip(weights, ys, strict=True) if not y),
+        )
+
+    @property
+    def census(self) -> bool:
+        """Every unit has weight 1: nothing was sampled, so there is no sampling variance."""
+        return self.var_hits == 0.0 and self.var_misses == 0.0
+
+    def _shapes(self, hit: bool, scale: float) -> tuple[float, float]:
+        """Beta(a, b) for one bound: the sample plus a mean-weight pseudo-observation.
+
+        ``hit`` adds a y = 1 unit (upper bound), otherwise a y = 0 unit (lower bound). (a, b) are
+        p n and (1 - p) n, with p the augmented Hajek estimate and n = p(1 - p) / v its
+        variance-matched size. b or a is 0 when the augmented sample is all of one class.
+        """
+        w = self.weight / self.n
+        extra = w * (w - 1.0)
+        total = scale * self.weight + w
+        p = (scale * self.weight_hits + (w if hit else 0.0)) / total
+        if p <= 0.0 or p >= 1.0:
+            return (0.0, 1.0) if p <= 0.0 else (1.0, 0.0)
+        hits = scale * self.var_hits + (extra if hit else 0.0)
+        misses = scale * self.var_misses + (0.0 if hit else extra)
+        n = p * (1.0 - p) * total * total / (hits * (1.0 - p) ** 2 + misses * p * p)
+        return p * n, (1.0 - p) * n
+
+    def bounds(self, level: float, scale: float = 1.0) -> tuple[float, float]:
+        alpha = 1.0 - level
+        a, b = self._shapes(False, scale)
+        lo = 0.0 if a <= 0.0 else _beta_ppf(alpha / 2.0, a, b)
+        a, b = self._shapes(True, scale)
+        hi = 1.0 if b <= 0.0 else _beta_ppf(1.0 - alpha / 2.0, a, b)
+        return lo, hi
+
+    def clears(self, tolerance: float, level: float, scale: float) -> bool:
+        """Whether the interval at ``scale`` excludes the tolerance on the side of the estimate.
+
+        Same test as :meth:`bounds` with one incomplete-beta call per step of a size search.
+        """
+        half_alpha = (1.0 - level) / 2.0
+        if self.weight_hits / self.weight > tolerance:
+            a, b = self._shapes(False, scale)
+            return a > 0.0 and regularized_beta(tolerance, a, b) < half_alpha
+        if tolerance >= 1.0:
+            return True
+        a, b = self._shapes(True, scale)
+        return b > 0.0 and regularized_beta(tolerance, a, b) >= 1.0 - half_alpha
+
+
 def weighted_proportion(
     ys: Sequence[bool],
     weights: Sequence[float],
     level: float = 0.95,
     method: str = "korn-graubard",
+    *,
+    finite: bool = False,
 ) -> Estimate:
     """Hajek (ratio) estimate of a population proportion from an unequal-probability sample.
 
@@ -406,8 +487,7 @@ def weighted_proportion(
 
     * point estimate   p = sum(w y) / sum(w)
     * linearized var   v = sum(w^2 (y - p)^2) / (sum w)^2   (Taylor linearization of the ratio,
-      with-replacement approximation: ignores the finite-population correction, so it is mildly
-      conservative for Poisson/Bernoulli sampling without replacement)
+      with-replacement approximation: ignores the finite-population correction, see ``finite``)
     * Kish effective n n_kish = (sum w)^2 / sum(w^2)
     * variance-matched effective n n_lin = p(1-p)/v  (when 0 < p < 1 and v > 0)
 
@@ -429,11 +509,32 @@ def weighted_proportion(
     With equal weights n_kish = n_lin = n, so the result coincides with
     ``clopper_pearson(sum(y), n)`` (``wilson(sum(y), n)`` for method "wilson").
 
+    ``finite=True`` is for weights that are inverse inclusion probabilities of a sample drawn
+    without replacement, when the target is the rate in that finite population rather than in
+    the process that produced it. It needs method "korn-graubard" and weights >= 1, and gives
+    ``Estimate.method == "hajek-korn-graubard-fpc"``. Each bound is a beta quantile matched to the
+    Hajek estimate and the variance with unit-level factors 1 - pi_i, after adding one
+    pseudo-observation of mean weight to the sample, y = 1 for the upper bound and y = 0 for the
+    lower (the extra event of the Fay & Feuer 1997 gamma interval, at mean rather than maximum
+    weight, on the Korn-Graubard beta).
+    The pseudo-observation protects the side a rate can hide on: disagreements missed in a
+    heavily weighted stratum leave the plain variance estimate too small, and without it the
+    upper bound misses at two to three times its nominal rate. The min(Kish, ...) floor above is
+    dropped here because it assumes one rate across strata and alone holds coverage above 99%
+    when disagreements concentrate in the oversampled stratum. With equal weights and sampling
+    fraction f this is the Clopper-Pearson form at size (n + 1) / (1 - f), which tracks the exact
+    hypergeometric interval (see tests/test_stats.py); a stratified sample has no such closed
+    exact form. ``n_eff`` is min(Kish, variance-matched) with the same factors, so it can exceed
+    n; it is descriptive here, the interval does not use it. All weights 1 is a census: nothing
+    was sampled, and the ordinary interval is returned, which describes the process.
+
     Weights must be finite and > 0. Empty input returns the vacuous interval.
     """
     level = _check_level(level)
     if method not in WEIGHTED_METHODS:
         raise ValueError(f"method must be one of {WEIGHTED_METHODS}, got {method!r}")
+    if finite and method != "korn-graubard":
+        raise ValueError("finite=True needs method 'korn-graubard'")
     name = f"hajek-{method}"
     y = [_as_label(v) for v in ys]
     w = [_as_finite("weight", v) for v in weights]
@@ -444,6 +545,10 @@ def weighted_proportion(
     n = len(y)
     if n == 0:
         return Estimate(None, 0.0, 1.0, 0, name, level, n_eff=0.0)
+    if finite:
+        sample = FiniteSample.of(y, w)
+        if not sample.census:
+            return _finite_estimate(sample, level)
     k = sum(y)
     if all(v == w[0] for v in w):
         # Equal weights: the Hajek estimator is exactly the sample proportion.
@@ -462,6 +567,16 @@ def weighted_proportion(
                 n_eff = min(n_eff, p * (1.0 - p) / var)
     lo, hi = weighted_bounds(p, n_eff, level, method)
     return Estimate(p, lo, hi, n, name, level, n_eff=n_eff)
+
+
+def _finite_estimate(sample: FiniteSample, level: float) -> Estimate:
+    p = min(1.0, max(0.0, sample.weight_hits / sample.weight))
+    var = sample.var_hits * (1.0 - p) ** 2 + sample.var_misses * p * p
+    n_eff = sample.weight**2 / (sample.var_hits + sample.var_misses)
+    if 0.0 < p < 1.0 and var > 0.0:
+        n_eff = min(n_eff, p * (1.0 - p) * sample.weight**2 / var)
+    lo, hi = sample.bounds(level)
+    return Estimate(p, lo, hi, sample.n, "hajek-korn-graubard-fpc", level, n_eff=n_eff)
 
 
 def weighted_bounds(p: float, n_eff: float, level: float, method: str) -> tuple[float, float]:
