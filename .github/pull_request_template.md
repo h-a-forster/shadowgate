@@ -5,7 +5,7 @@
 ## Checklist
 
 - [ ] Tests added or updated; `uv run pytest` passes (no network access in tests)
-- [ ] `uv run ruff check .` passes
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass
 - [ ] `uv run mypy` passes
 - [ ] `CHANGELOG.md` updated under "Unreleased" (if user-visible)
 - [ ] Docs updated (`README.md`, `docs/`) if behavior or config changed

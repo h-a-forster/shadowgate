@@ -11,6 +11,7 @@ shadowgate uses [uv](https://docs.astral.sh/uv/) for development. Python 3.11 or
 uv sync --all-groups      # create .venv with the package (editable) and dev tools
 uv run pytest             # run the test suite
 uv run ruff check .       # lint
+uv run ruff format --check .
 uv run mypy               # type-check (config in pyproject.toml)
 ```
 
@@ -69,7 +70,8 @@ Each pluggable family is built by a factory function `from_spec(spec, **deps)` t
 - Keep pull requests focused on one change; open an issue first for larger features.
 - Write commit messages in the imperative mood with a short summary line
   (for example "Add regex comparator").
-- Before opening a pull request, make sure `uv run pytest`, `uv run ruff check .` and `uv run mypy` pass.
+- Before opening a pull request, make sure `uv run pytest`, `uv run ruff check .`,
+  `uv run ruff format --check .` and `uv run mypy` pass.
 - Update `CHANGELOG.md` under "Unreleased" for user-visible changes, and update the docs when
   behavior or configuration changes.
 - CI runs lint, the test matrix (Linux, Windows, macOS; Python 3.11 to 3.13) and a build smoke
@@ -77,8 +79,9 @@ Each pluggable family is built by a factory function `from_spec(spec, **deps)` t
 
 ## Releasing
 
-Set `__version__` in `src/shadowgate/__init__.py`, move the "Unreleased" entries in
-`CHANGELOG.md` under the new version, then push a matching tag (`v0.1.0`). The release workflow
-runs the checks, builds the wheel and sdist, and attaches them to a GitHub release.
+Set `__version__` in `src/shadowgate/__init__.py` and `version` / `date-released` in
+`CITATION.cff`, move the "Unreleased" entries in `CHANGELOG.md` under the new version and date
+them, add `docs/release-notes-<version>.md`, then push a matching tag (`v<version>`). The release
+workflow runs the checks, builds the wheel and sdist, and attaches them to a GitHub release.
 
 By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
