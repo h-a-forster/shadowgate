@@ -200,8 +200,8 @@ uv run python experiments/analyze_cascade.py experiments/mmlu-pro-cascade
 uv run python experiments/analyze_cascade.py experiments/bbh-cascade
 ```
 
-The analysis defaults to 5000 seeds and takes a few minutes per experiment. Pass `--seeds` to
-change it.
+The analysis defaults to 5000 seeds and takes about 5 minutes for BBH and 15 for MMLU-Pro on a
+laptop. Pass `--seeds` to change it.
 
 ## Earlier run: Haiku 5.5 -> Opus 5.5 on multi-step arithmetic
 

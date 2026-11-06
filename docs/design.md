@@ -434,10 +434,10 @@ stratum with no completed audit cannot be represented: it is excluded from the e
 and counted in `n_unrepresented`. If the skipped cases span several strata and one holding >= 10%
 of them has < 10 completed audits, `ok` is downgraded to `inconclusive` (a rule that depends only
 on the design and the audit counts, never on outcomes). The status uses a fixed-sample interval:
-checking repeatedly and stopping at the first `ok` inflates false `ok` (simulated 2.4% -> 12.2%
-when checking every 50 audits), so fix the number of audits in advance or use a stricter `level`
-(e.g. 0.99) for repeated checks. It works for eval-mode runs too: there every non-final attempt
-already has `agreement`, so every skipped case is "audited" with π = 1.
+checking repeatedly and stopping at the first `ok` inflates false `ok`, so fix the number of
+audits in advance or use a stricter `level` (e.g. 0.99) for repeated checks. It works for
+eval-mode runs too: there every non-final attempt already has `agreement`, so every skipped case
+is "audited" with π = 1.
 
 ## sweep.py
 
@@ -591,7 +591,7 @@ shadowgate datasets make arithmetic -n N [--seed S] [--min-steps K] [--max-steps
 shadowgate datasets show TASKS [--limit N]
 ```
 Default ledger: `.shadowgate/ledger.sqlite`. `--level` is in (0.5, 1), default 0.95. Exit codes:
-0 ok, 1 runtime error or a run stopped after repeated failures, 2 usage/config error, 3 audit
-breach with `--fail-on-breach`, 4 spending cap reached, 130 interrupted. Errors print one line to
-stderr (`shadowgate: error: ...`), no tracebacks unless `SHADOWGATE_DEBUG=1`. Full reference:
+0 ok, 1 runtime error, a run stopped after repeated failures or a run in which every task
+failed, 2 usage/config error, 3 audit breach with `--fail-on-breach`, 4 spending cap reached, 130
+interrupted. Errors print one line to stderr (`shadowgate: error: ...`), no tracebacks unless `SHADOWGATE_DEBUG=1`. Full reference:
 [cli.md](cli.md).

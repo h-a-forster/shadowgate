@@ -58,9 +58,8 @@ Conventions
   the effective sample size, see :func:`~shadowgate.stats.weighted_proportion`).
 * **Fixed-sample status.** The status uses a fixed-sample confidence interval. Checking it
   repeatedly as audits accumulate and stopping at the first ``ok`` (optional stopping) inflates
-  the chance of a false ``ok``: in simulation a 2.4 % false-ok rate at a single look became
-  12.2 % when checking every 50 audits. Fix the number of audits in advance, or use a stricter
-  ``level`` (e.g. 0.99) when the status is checked repeatedly.
+  the chance of a false ``ok``. Fix the number of audits in advance, or use a stricter ``level``
+  (e.g. 0.99) when the status is checked repeatedly.
 * **Resolving an inconclusive status.** ``audits_to_resolve`` estimates the additional audits
   needed if the rate holds. It is None when more audits cannot help: when the status uses
   ``skipped_error`` (every skipped case is already graded) or every skipped case is already
