@@ -55,20 +55,20 @@
    "true_disagreement": 0.06101190476190476,
    "audits_mean": 454.7818,
    "estimate_mean": 0.06097594996394897,
-   "coverage_of_disagreement": 0.9604,
-   "coverage_of_disagreement_mc_se": 0.0027579644667761753,
-   "coverage_of_error": 0.1094,
-   "coverage_of_error_mc_se": 0.004414332112562443,
-   "upper_median": 0.08025084031849383,
+   "coverage_of_disagreement": 0.9724,
+   "coverage_of_disagreement_mc_se": 0.002316818508213363,
+   "coverage_of_error": 0.1526,
+   "coverage_of_error_mc_se": 0.005085533207049188,
+   "upper_median": 0.08252530309347561,
    "status": {
-    "breach": 0.2612,
-    "inconclusive": 0.738,
-    "ok": 0.0008
+    "breach": 0.2558,
+    "inconclusive": 0.7438,
+    "ok": 0.0004
    },
    "status_mc_se": {
-    "breach": 0.006212480342021212,
-    "inconclusive": 0.006218617209637525,
-    "ok": 0.00039983996798719363
+    "breach": 0.006170354284804075,
+    "inconclusive": 0.006173516987908917,
+    "ok": 0.00028278613827413816
    }
   },
   "serve_audit": {
@@ -76,8 +76,8 @@
    "n_audited": 462,
    "disagreement_weighted": {
     "value": 0.050946142649199416,
-    "lo": 0.037613227743234834,
-    "hi": 0.0684685770733604,
+    "lo": 0.03755656968028598,
+    "hi": 0.07078513326603497,
     "n": 462,
     "n_eff": 520.9370860927153
    },
@@ -91,8 +91,8 @@
    "reference_status": "breach",
    "final_tier_error_on_audits": {
     "value": 0.04439592430858806,
-    "lo": 0.030961814410830346,
-    "hi": 0.06241272437843426,
+    "lo": 0.03091519434126999,
+    "hi": 0.06473399271262315,
     "n": 462
    }
   },
@@ -201,18 +201,18 @@
     "true_disagreement": 0.09836065573770492,
     "audits_mean": 40.89,
     "estimate_mean": 0.0987944869916765,
-    "coverage_of_disagreement": 0.9792,
-    "coverage_of_disagreement_mc_se": 0.002018284419996351,
-    "coverage_of_error": 0.9366,
-    "coverage_of_error_mc_se": 0.0034461700480388374,
-    "upper_median": 0.2127087350807053,
+    "coverage_of_disagreement": 0.9926,
+    "coverage_of_disagreement_mc_se": 0.001212042903531056,
+    "coverage_of_error": 0.9966,
+    "coverage_of_error_mc_se": 0.0008232180756032946,
+    "upper_median": 0.24259179587773394,
     "status": {
-     "breach": 0.246,
-     "inconclusive": 0.754
+     "breach": 0.2328,
+     "inconclusive": 0.7672
     },
     "status_mc_se": {
-     "breach": 0.006090714243830521,
-     "inconclusive": 0.006090714243830521
+     "breach": 0.0059766907231343334,
+     "inconclusive": 0.0059766907231343334
     }
    }
   }
@@ -273,20 +273,20 @@
    "true_disagreement": 0.044642857142857144,
    "audits_mean": 454.729,
    "estimate_mean": 0.04446148336210842,
-   "coverage_of_disagreement": 0.9586,
-   "coverage_of_disagreement_mc_se": 0.0028173050952994064,
-   "coverage_of_error": 0.0004,
-   "coverage_of_error_mc_se": 0.00028278613827413816,
-   "upper_median": 0.06138433778454422,
+   "coverage_of_disagreement": 0.9736,
+   "coverage_of_disagreement_mc_se": 0.0022672908944376758,
+   "coverage_of_error": 0.0008,
+   "coverage_of_error_mc_se": 0.00039983996798719363,
+   "upper_median": 0.06383142472100234,
    "status": {
     "breach": 0.0004,
-    "inconclusive": 0.909,
-    "ok": 0.0906
+    "inconclusive": 0.953,
+    "ok": 0.0466
    },
    "status_mc_se": {
     "breach": 0.00028278613827413816,
-    "inconclusive": 0.004067407036429965,
-    "ok": 0.004059350686994165
+    "inconclusive": 0.002993025225419928,
+    "ok": 0.002980887116279313
    }
   },
   "serve_audit": {
@@ -294,8 +294,8 @@
    "n_audited": 471,
    "disagreement_weighted": {
     "value": 0.04070175438596491,
-    "lo": 0.02878911593680078,
-    "hi": 0.056906078256311776,
+    "lo": 0.02874847459709562,
+    "hi": 0.05918441481401038,
     "n": 471,
     "n_eff": 528.80859375
    },
@@ -309,8 +309,8 @@
    "reference_status": "breach",
    "final_tier_error_on_audits": {
     "value": 0.06456140350877193,
-    "lo": 0.04873763359978023,
-    "hi": 0.08454324323467022,
+    "lo": 0.04866844141000515,
+    "hi": 0.08652684846899072,
     "n": 471
    }
   },
@@ -419,18 +419,18 @@
     "true_disagreement": 0.09016393442622951,
     "audits_mean": 40.8774,
     "estimate_mean": 0.09074823974720726,
-    "coverage_of_disagreement": 0.9794,
-    "coverage_of_disagreement_mc_se": 0.0020087628033194937,
-    "coverage_of_error": 0.903,
-    "coverage_of_error_mc_se": 0.004185474883451099,
-    "upper_median": 0.20490975139415069,
+    "coverage_of_disagreement": 0.9918,
+    "coverage_of_disagreement_mc_se": 0.0012753634776015805,
+    "coverage_of_error": 0.9954,
+    "coverage_of_error_mc_se": 0.000956957679315031,
+    "upper_median": 0.2339038788770078,
     "status": {
-     "breach": 0.1656,
-     "inconclusive": 0.8344
+     "breach": 0.1546,
+     "inconclusive": 0.8454
     },
     "status_mc_se": {
-     "breach": 0.005256931424319705,
-     "inconclusive": 0.005256931424319705
+     "breach": 0.005112706523946,
+     "inconclusive": 0.005112706523946
     }
    }
   }

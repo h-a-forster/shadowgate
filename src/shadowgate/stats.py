@@ -411,6 +411,7 @@ class FiniteSample:
 
     n: int
     weight: float  # sum of w
+    max_weight: float  # largest w, the weight of the pseudo-observation
     weight_hits: float  # sum of w over y = 1
     var_hits: float
     var_misses: float
@@ -422,6 +423,7 @@ class FiniteSample:
         return cls(
             len(ys),
             math.fsum(weights),
+            max(weights),
             math.fsum(w for w, y in zip(weights, ys, strict=True) if y),
             math.fsum(w * (w - 1.0) for w, y in zip(weights, ys, strict=True) if y),
             math.fsum(w * (w - 1.0) for w, y in zip(weights, ys, strict=True) if not y),
@@ -433,13 +435,13 @@ class FiniteSample:
         return self.var_hits == 0.0 and self.var_misses == 0.0
 
     def _shapes(self, hit: bool, scale: float) -> tuple[float, float]:
-        """Beta(a, b) for one bound: the sample plus a mean-weight pseudo-observation.
+        """Beta(a, b) for one bound: the sample plus a maximum-weight pseudo-observation.
 
         ``hit`` adds a y = 1 unit (upper bound), otherwise a y = 0 unit (lower bound). (a, b) are
         p n and (1 - p) n, with p the augmented Hajek estimate and n = p(1 - p) / v its
         variance-matched size. b or a is 0 when the augmented sample is all of one class.
         """
-        w = self.weight / self.n
+        w = self.max_weight
         extra = w * (w - 1.0)
         total = scale * self.weight + w
         p = (scale * self.weight_hits + (w if hit else 0.0)) / total
@@ -514,13 +516,16 @@ def weighted_proportion(
     the process that produced it. It needs method "korn-graubard" and weights >= 1, and gives
     ``Estimate.method == "hajek-korn-graubard-fpc"``. Each bound is a beta quantile matched to the
     Hajek estimate and the variance with unit-level factors 1 - pi_i, after adding one
-    pseudo-observation of mean weight to the sample, y = 1 for the upper bound and y = 0 for the
-    lower (the extra event of the Fay & Feuer 1997 gamma interval, at mean rather than maximum
-    weight, on the Korn-Graubard beta).
-    The pseudo-observation protects the side a rate can hide on: disagreements missed in a
-    heavily weighted stratum leave the plain variance estimate too small, and without it the
-    upper bound misses at two to three times its nominal rate. The min(Kish, ...) floor above is
-    dropped here because it assumes one rate across strata and alone holds coverage above 99%
+    pseudo-observation of the largest sampled weight, y = 1 for the upper bound and y = 0 for the
+    lower (the extra event of the Fay & Feuer 1997 gamma interval, on the Korn-Graubard beta).
+    The pseudo-observation protects the side a rate can hide on: when none of a heavily weighted
+    stratum's disagreements is drawn, the sample shows nothing there, so the bound has to allow
+    for one event at that stratum's weight. A mean weight is too small for this: the upper bound
+    missed in 35% of draws with 50 of 800 disagreeing at pi = 0.02. The interval needs about five
+    expected audits (N pi) in every stratum: a stratum with no audit is invisible, its weight
+    included, and the upper bound then misses with probability about exp(-N pi) whatever the
+    pseudo-observation (see experiments/audit-interval). The min(Kish, ...) floor above is dropped
+    here because it assumes one rate across strata and alone holds coverage above 99%
     when disagreements concentrate in the oversampled stratum. With equal weights and sampling
     fraction f this is the Clopper-Pearson form at size (n + 1) / (1 - f), which tracks the exact
     hypergeometric interval (see tests/test_stats.py); a stratified sample has no such closed

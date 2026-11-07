@@ -55,18 +55,18 @@
    "true_disagreement": 0.032188841201716736,
    "audits_mean": 122.1158,
    "estimate_mean": 0.03239053361098141,
-   "coverage_of_disagreement": 0.9888,
-   "coverage_of_disagreement_mc_se": 0.0014882580421418854,
-   "coverage_of_error": 0.809,
-   "coverage_of_error_mc_se": 0.0055591186351795,
-   "upper_median": 0.06776122444141341,
+   "coverage_of_disagreement": 0.99,
+   "coverage_of_disagreement_mc_se": 0.0014071247279470295,
+   "coverage_of_error": 0.9212,
+   "coverage_of_error_mc_se": 0.0038102640328460174,
+   "upper_median": 0.07353265834115819,
    "status": {
-    "inconclusive": 0.8718,
-    "ok": 0.1282
+    "inconclusive": 0.9568,
+    "ok": 0.0432
    },
    "status_mc_se": {
-    "inconclusive": 0.004727890861684521,
-    "ok": 0.004727890861684521
+    "inconclusive": 0.0028751959933194125,
+    "ok": 0.002875195993319412
    }
   },
   "serve_audit": {
@@ -74,8 +74,8 @@
    "n_audited": 127,
    "disagreement_weighted": {
     "value": 0.02663934426229508,
-    "lo": 0.00974541132165685,
-    "hi": 0.06270864867066761,
+    "lo": 0.009721723393392612,
+    "hi": 0.06802918245898537,
     "n": 127,
     "n_eff": 143.63329312424608
    },
@@ -89,8 +89,8 @@
    "reference_status": "inconclusive",
    "final_tier_error_on_audits": {
     "value": 0.06557377049180328,
-    "lo": 0.03311281491631801,
-    "hi": 0.1164685612139098,
+    "lo": 0.033030651634726294,
+    "hi": 0.12028564445633672,
     "n": 127
    }
   },
@@ -163,16 +163,16 @@
    "estimate_mean": 0.028015748250932195,
    "coverage_of_disagreement": 0.995,
    "coverage_of_disagreement_mc_se": 0.0009974968671630005,
-   "coverage_of_error": 0.6874,
-   "coverage_of_error_mc_se": 0.006555627201115085,
-   "upper_median": 0.06142044172617078,
+   "coverage_of_error": 0.854,
+   "coverage_of_error_mc_se": 0.00499367600070329,
+   "upper_median": 0.06748291826141672,
    "status": {
-    "inconclusive": 0.7864,
-    "ok": 0.2136
+    "inconclusive": 0.9246,
+    "ok": 0.0754
    },
    "status_mc_se": {
-    "inconclusive": 0.005796120081571809,
-    "ok": 0.005796120081571809
+    "inconclusive": 0.003734028387679987,
+    "ok": 0.0037340283876799866
    }
   },
   "serve_audit": {
@@ -180,8 +180,8 @@
    "n_audited": 122,
    "disagreement_weighted": {
     "value": 0.008016032064128256,
-    "lo": 0.0021371416608126914,
-    "hi": 0.03529174026466331,
+    "lo": 0.0021332168853107625,
+    "hi": 0.04104315586497753,
     "n": 122,
     "n_eff": 140.36133032694477
    },
@@ -195,8 +195,8 @@
    "reference_status": "inconclusive",
    "final_tier_error_on_audits": {
     "value": 0.036072144288577156,
-    "lo": 0.014185743745022794,
-    "hi": 0.07811779991642043,
+    "lo": 0.014159053617835315,
+    "hi": 0.08174056031962396,
     "n": 122
    }
   },

@@ -401,6 +401,31 @@ def test_finite_equal_weights_track_the_exact_hypergeometric_interval(
     assert abs(est.hi * big_n - hi) <= 1.1
 
 
+def test_finite_pseudo_observation_has_the_largest_weight() -> None:
+    # Hand-computed: 3 agreements at w = 2 and 2 at w = 10 give 26 of weight. The upper bound adds
+    # a hit of weight 10, so p = 10/36, and variance terms w(w - 1) are 90 for hits and
+    # 3 * 2 + 2 * 90 = 186 for misses. n = p(1 - p) 36^2 / (90 (1 - p)^2 + 186 p^2) = 336960/79440.
+    est = weighted_proportion([False] * 5, [2.0, 2.0, 2.0, 10.0, 10.0], finite=True)
+    n = 336960.0 / 79440.0
+    assert est.hi is not None
+    assert regularized_beta(est.hi, n * 10.0 / 36.0, n * 26.0 / 36.0) == pytest.approx(0.975)
+
+
+def test_finite_upper_bound_holds_when_a_light_stratum_hides_the_disagreements() -> None:
+    # 200@0.9 (0) + 800@0.02 (50): about 36% of draws audit none of the 50. A mean-weight
+    # pseudo-observation leaves the upper bound below the truth in all of those.
+    pop = [(0.9, False)] * 200 + [(0.02, True)] * 50 + [(0.02, False)] * 750
+    rng = random.Random(20261107)
+    reps = 400
+    below = 0
+    for _ in range(reps):
+        drawn = [(y, 1.0 / pi) for pi, y in pop if rng.random() < pi]
+        est = weighted_proportion([y for y, _ in drawn], [w for _, w in drawn], finite=True)
+        assert est.hi is not None
+        below += est.hi < 0.05
+    assert below / reps <= 0.05
+
+
 def test_finite_interval_edge_cases() -> None:
     assert weighted_proportion([True, False], [1.0, 1.0], finite=True) == weighted_proportion(
         [True, False], [1.0, 1.0]

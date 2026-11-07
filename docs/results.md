@@ -75,7 +75,7 @@ audit cannot see them. "False alarms" are cases where Haiku is right and the fin
 | Haiku disagreement with final tier, all skipped | 6.1% (4.9-7.5) | 4.5% (3.5-5.7) | 3.2% (2.0-5.2) | 2.8% (1.6-4.7) |
 | Haiku errors shared with the final tier | 55 of 125 (44%) | 76 of 125 (61%) | 13 of 25 | 14 of 25 |
 | False alarms | 12 | 11 | 3 | 2 |
-| Serve-run audit: weighted disagreement | 5.1% (3.8-6.8), 462 audits | 4.1% (2.9-5.7), 471 audits | 2.7% (1.0-6.3), 127 audits | 0.8% (0.2-3.5), 122 audits |
+| Serve-run audit: weighted disagreement | 5.1% (3.8-7.1), 462 audits | 4.1% (2.9-5.9), 471 audits | 2.7% (1.0-6.8), 127 audits | 0.8% (0.2-4.1), 122 audits |
 | Status vs 5%, audit only | inconclusive | inconclusive | inconclusive | **ok** |
 | Status vs 5%, graded against gold | breach | breach | inconclusive | inconclusive |
 | AUROC of Haiku's confidence (Haiku correct) | 0.819 | 0.819 | 0.836 | 0.836 |
@@ -88,11 +88,11 @@ What this shows:
   shares more of the cheap tier's errors (Sonnet 61%, Opus 44%), so it reports lower disagreement
   and looks better.
 - **One audit said `ok` when the gold-graded error was above tolerance.** On BBH, the Haiku ->
-  Sonnet audit put disagreement at 0.8% (upper bound 3.5%), status `ok` against 5%. The
+  Sonnet audit put disagreement at 0.8% (upper bound 4.1%), status `ok` against 5%. The
   gold-graded error was 5.4% (3.7-7.8). The gold interval contains 5%, so this is not a proven
-  breach. The 0.8% was a low draw against the true 2.8%, but `ok` itself is not rare here:
-  re-drawn 5000 times offline, the audit-only status was `ok` in 21.4% of draws (Monte Carlo SE
-  0.6 points). The lasting point is the gap
+  breach. The 0.8% was a low draw against the true 2.8%, but `ok` is not a one-off here:
+  re-drawn 5000 times offline, the audit-only status was `ok` in 7.5% of draws (Monte Carlo SE
+  0.4 points). The lasting point is the gap
   between disagreement (2.8%) and gold-graded error (5.4%). The audit is blind to errors the
   final tier shares (14 of 25 Haiku errors here), so even a well-sized audit would centre on
   disagreement, not error.
@@ -124,9 +124,9 @@ true disagreement rate and the gold-graded error rate:
 |---|---|---|---|---|
 | Audits per draw (mean) | 455 | 455 | 122 | 122 |
 | Mean estimate | 6.10% (true disagreement 6.10%) | 4.45% (4.46%) | 3.24% (3.22%) | 2.80% (2.79%) |
-| Interval covers true disagreement | 96.0% (±0.3) | 95.9% (±0.3) | 98.9% (±0.1) | 99.5% (±0.1) |
-| Interval covers gold-graded error | **10.9%** (±0.4) | **0.04%** (±0.03) | 80.9% (±0.6) | 68.7% (±0.7) |
-| Status vs 5% | inconclusive 73.8%, breach 26.1%, ok 0.08% (±0.6) | inconclusive 90.9%, ok 9.1%, breach 0.04% (±0.4) | inconclusive 87.2%, ok 12.8% (±0.5) | inconclusive 78.6%, ok 21.4% (±0.6) |
+| Interval covers true disagreement | 97.2% (±0.2) | 97.4% (±0.2) | 99.0% (±0.1) | 99.5% (±0.1) |
+| Interval covers gold-graded error | **15.3%** (±0.5) | **0.08%** (±0.04) | 92.1% (±0.4) | 85.4% (±0.5) |
+| Status vs 5% | inconclusive 74.4%, breach 25.6%, ok 0.04% (±0.6) | inconclusive 95.3%, ok 4.7%, breach 0.04% (±0.3) | inconclusive 95.7%, ok 4.3% (±0.3) | inconclusive 92.5%, ok 7.5% (±0.4) |
 
 "±" is the Monte Carlo standard error over the 5000 draws; the 1000-seed figures in earlier drafts
 differed by up to 3 points through seed noise alone.
@@ -142,23 +142,64 @@ replacement, and that interval also took the smaller of two effective sizes, whi
 disagreement rate across strata; this second choice held coverage above 99% even with a
 finite-population correction applied. The figures before the fix were: coverage of gold-graded
 error 38.6%, 0.8%, 98.4%, 97.1%, and `inconclusive` in 94.5%, 99.3%, 99.4%, 98.6% of draws. The
-published point estimates did not change. Their intervals did: 3.1-7.8 is now 3.8-6.8 and
-2.3-6.6 is now 2.9-5.7 on MMLU-Pro, and 0.5-7.6 is now 1.0-6.3 and 0.0-4.8 is now 0.2-3.5 on BBH.
+published point estimates did not change. Their intervals did: 3.1-7.8 is now 3.8-7.1 and
+2.3-6.6 is now 2.9-5.9 on MMLU-Pro, and 0.5-7.6 is now 1.0-6.8 and 0.0-4.8 is now 0.2-4.1 on BBH.
 
-The interval now uses unit-level finite-population factors (1 - π) and adds one mean-weight
-hypothetical audit to each bound. It is a Korn-Graubard beta interval with these changes, not an exact
+The interval now uses unit-level finite-population factors (1 - π) and adds one hypothetical audit
+at the largest sampled weight to each bound. It is a Korn-Graubard beta interval with these changes, not an exact
 one: a stratified sample has no simple exact hypergeometric form. With equal weights it tracks
-the exact hypergeometric interval to about one case. It is close to nominal on MMLU-Pro (about
-96%) and still above it on BBH (98.9-99.5%), where only 15 and 13 skipped cases disagree. At counts
+the exact hypergeometric interval to about one case. It is somewhat conservative on MMLU-Pro (about
+97%) and more so on BBH (99.0-99.5%), where only 15 and 13 skipped cases disagree. At counts
 that low a discrete interval cannot land on 95%. It describes the skipped cases of this run, not
 future traffic, which can differ whatever share of this run was audited.
 
 As an estimate of error the audit is biased downwards by the shared errors, and the narrower
-interval makes that plainer rather than better. With ~455 audits on MMLU-Pro it almost never
-includes the gold-graded error. With ~122 audits on BBH it includes it 69-81% of the time. In all
-four populations the gold-graded error is above 5%, yet the audit-only status was `ok` in 0.08%,
-9.1%, 12.8% and 21.4% of draws. Those `ok`s are mostly correct about disagreement, which is below
+interval makes that plainer rather than better. With ~455 audits on MMLU-Pro it rarely
+includes the gold-graded error (15.3% and 0.08% of draws). With ~122 audits on BBH it includes it 85-92% of the time. In all
+four populations the gold-graded error is above 5%, yet the audit-only status was `ok` in 0.04%,
+4.7%, 4.3% and 7.5% of draws. Those `ok`s are mostly correct about disagreement, which is below
 5% in three of the four populations, and wrong about error.
+
+### Interval on stressed designs (offline)
+
+The re-draws above keep the published strata, where disagreements are spread across both. This
+check moves them into a lightly sampled stratum, which is where a false `ok` comes from: `ok` needs
+an upper bound below the tolerance, so the share of draws with the upper bound below the truth caps
+the false `ok` rate at any tolerance under the truth.
+[`simulate_designs.py`](../experiments/audit-interval/simulate_designs.py) draws each design 4000
+times through `weighted_proportion(..., finite=True)`; outputs are in
+[`analysis.txt`](../experiments/audit-interval/analysis.txt) and `analysis.json`. "N@π (k)" is N
+cases audited at rate π, k of them disagreeing. "Before" is the same interval with a mean-weight
+hypothetical audit, an earlier version of this change that was never released.
+
+| Design | True rate | Before: coverage, upper bound below truth | After: coverage, upper bound below truth, lower bound above truth |
+|---|---|---|---|
+| 150@0.5 (0) + 300@0.2 (0) + 1000@0.05 (40) | 2.76% | 86.0%, **12.5%** | 98.5%, 0.0%, 1.5% |
+| 200@0.9 (0) + 800@0.02 (50) | 5.00% | 63.9%, **34.6%** | 98.9%, 0.0%, 1.1% |
+| 400@0.5 (0) + 1000@0.2 (60) | 4.29% | 95.8%, 2.6% | 96.6%, 1.8%, 1.6% |
+| 400@0.5 (0) + 1000@0.05 (10) | 0.71% | 98.7%, 0.0% | 98.7%, 0.0%, 1.3% |
+| 300@0.5 (30) + 1000@0.2 (30) | 4.62% | 96.1%, 2.4% | 96.9%, 1.6%, 1.5% |
+| 300@0.5 (150) + 1000@0.2 (300) | 34.62% | 95.8%, 2.2% | 96.0%, 2.1%, 1.9% |
+| Arithmetic, 74@0.5 (3) + 107@0.2 (0) | 1.66% | 100.0%, 0.0% | 100.0%, 0.0%, 0.0% |
+
+When none of a heavy stratum's disagreements is drawn, the sample shows nothing there; with 50 of
+800 at π = 0.02 that happens in 36% of draws. A mean-weight audit is too small to allow for
+them, and one at the largest weight is enough. The trade-off went to the conservative side, because
+a false `ok` is the expensive error. The published upper bounds rise from 6.8 to 7.1, 5.7 to 5.9,
+6.3 to 6.8 and 3.5 to 4.1, mean width on the arithmetic design from 6.9 to 10.1 points, and the
+audit-only `ok` gets rarer.
+
+**Where it holds.** The interval is for the skipped cases of one run, audited with known rates
+fixed in advance, with about five or more expected audits (N π) in every stratum. A grid of 180
+designs (a heavy stratum beside 400@0.5, 2000 draws each; π 0.01-0.2, N π 2-50, up to all cases
+disagreeing) gives, from N π = 5 up, an upper bound below the truth in under 2% of draws and a
+lower bound above it in under 2.5%. Below that a stratum can go unaudited, and then neither its
+disagreements nor its weight appear in the sample: the upper bound missed in 14% of draws at
+N π = 2 and 5% at N π = 3, about e^(-N π), and no pseudo-observation drawn from the sample can fix
+that. The status blocks `ok` when a stratum with at least 10% of skipped cases has under 10 audits;
+a smaller stratum has only a note, so a false `ok` is still possible there. The interval is
+approximate, not exact: within this regime it is conservative rather than at 95%. These are
+simulated designs, not a proof, and nothing here covers future traffic.
 
 ### Drift check (offline): threshold set on STEM, served on humanities
 
@@ -172,12 +213,12 @@ biology; 720 tasks) is at most 5%. That is 0.88. STEM at 0.88: Haiku serves 71.2
 | Served by Haiku alone | 122 of 360 (33.9%) | 122 of 360 (33.9%) |
 | Haiku error vs gold | 12.3% (7.6-19.3) | 12.3% (7.6-19.3) |
 | Disagreement with final tier | 9.8% (5.7-16.4) | 9.0% (5.1-15.4) |
-| Audit re-drawn 5000 times (~41 audits each) | mean 9.9%; breach 24.6% (±0.6), inconclusive 75.4% | mean 9.1%; breach 16.6% (±0.5), inconclusive 83.4% |
+| Audit re-drawn 5000 times (~41 audits each) | mean 9.9%; breach 23.3% (±0.6), inconclusive 76.7% | mean 9.1%; breach 15.5% (±0.5), inconclusive 84.5% |
 
 Haiku's confidence drops on humanities, so it serves fewer of them, but the ones it keeps are wrong
 nearly four times as often as on STEM. The audit never reported `ok` on this shifted traffic. At
-this volume (~41 audits) it confirmed the breach in only 17-25% of draws; the median upper bound
-was about 21%. Catching drift of this size needs about a hundred audits on the shifted slice at these audit rates.
+this volume (~41 audits) it confirmed the breach in only 15-23% of draws; the median upper bound
+was 23-24%. Catching drift of this size needs well over ~41 audits on the shifted slice at these audit rates.
 
 ### Limitations
 
@@ -278,7 +319,7 @@ of them with Opus.
 | [0.80, 0.90) | 44 | 15 | 13.3% (3.6-33.7) | 4.5% (1.3-15.1) |
 | [0.90, 0.95) | 30 | 16 | 0% (0.0-15.8) | 3.3% (0.6-16.7) |
 | [0.95, 1.00] | 107 | 20 | 0% (0.0-15.4) | 0% (0.0-3.5) |
-| All skipped | 181 | 51 | 2.5% (0.6-9.0), weighted | 1.7% (0.6-4.8) |
+| All skipped | 181 | 51 | 2.5% (0.6-12.1), weighted | 1.7% (0.6-4.8) |
 | Status vs 5% tolerance | | | inconclusive (audit only) | ok (all 181 graded) |
 
 - Three skipped cases were wrong, at confidence 0.80, 0.85 and 0.93. All three were off by a factor
@@ -290,7 +331,7 @@ of them with Opus.
 - Two statuses, against a 5% tolerance. With references, `shadowgate audit` grades all 181
   skipped cases and reports `ok` (upper bound 4.8%); this is the status the published report
   shows, and it does not depend on the audit sample. From the 51 audits alone the status is
-  `inconclusive` (upper bound 9.0%); that is the status a run without references would get. The
+  `inconclusive` (upper bound 12.1%); that is the status a run without references would get. The
   report and `shadowgate audit` now print both when references are present.
 - Audit spend was 1.9x the serving spend. Audits run on Opus, which costs about 25x Haiku per task;
   the audit rates here were set high so a 200-task run yields a usable sample. At a flat 5% audit
@@ -314,8 +355,8 @@ uv run python experiments/arithmetic-haiku-opus/simulate_audit.py
 | Mean point estimate | 1.67% (true 1.66%) |
 | Interval covers the true rate | 5000 of 5000 draws (100.0%) |
 | Draws with no disagreement observed | 12.7% (Monte Carlo SE 0.5); exact value 12.5% |
-| Upper bound | median 7.3%, 5th-95th percentile 5.2-9.7% |
-| Status vs 5% tolerance | inconclusive 97.3%, ok 2.7% (Monte Carlo SE 0.2) |
+| Upper bound | median 10.4%, 5th-95th percentile 8.2-13.3% |
+| Status vs 5% tolerance | inconclusive in all 5000 draws |
 
 The exact no-disagreement share follows from the design: all three disagreements sit in the 0.5
 stratum (confidence 0.80, 0.85, 0.93), so no audit sees any of them with probability
@@ -325,7 +366,8 @@ The weighted estimate is close to the truth here and the interval is conservativ
 missed in 5000 draws, against 95% nominal): with three disagreements in the population, a
 discrete interval cannot land on 95%. About 32% of the 181 skipped cases are audited, and the
 interval accounts for that. The cost of the remaining width: at this audit size the upper bound
-fell below 5% in only 2.7% of draws, so the audit alone could rarely confirm the tolerance. This checks one population with three errors; it is not a
+never fell below 5%, so the audit alone could not confirm the tolerance: the hypothetical audit at
+weight 5 keeps the bound above it with about 58 audits. This checks one population with three errors; it is not a
 general coverage result.
 
 ### Reproduce

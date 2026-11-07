@@ -1,0 +1,2154 @@
+{
+ "seeds": 4000,
+ "grid_seeds": 2000,
+ "level": 0.95,
+ "designs": {
+  "150@0.5 (0) + 300@0.2 (0) + 1000@0.05 (40)": {
+   "strata": [
+    [
+     150,
+     0.5,
+     0
+    ],
+    [
+     300,
+     0.2,
+     0
+    ],
+    [
+     1000,
+     0.05,
+     40
+    ]
+   ],
+   "cases": 1450,
+   "true": 0.027586206896551724,
+   "before": {
+    "coverage": 0.8595,
+    "lo_above_truth": 0.01525,
+    "hi_below_truth": 0.12525,
+    "mean_width": 0.07029585234525272
+   },
+   "after": {
+    "coverage": 0.985,
+    "lo_above_truth": 0.015,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.08764765932009463
+   }
+  },
+  "200@0.9 (0) + 800@0.02 (50)": {
+   "strata": [
+    [
+     200,
+     0.9,
+     0
+    ],
+    [
+     800,
+     0.02,
+     50
+    ]
+   ],
+   "cases": 1000,
+   "true": 0.05,
+   "before": {
+    "coverage": 0.639,
+    "lo_above_truth": 0.015,
+    "hi_below_truth": 0.346,
+    "mean_width": 0.14282120681761132
+   },
+   "after": {
+    "coverage": 0.9885,
+    "lo_above_truth": 0.0115,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.23964875934779722
+   }
+  },
+  "400@0.5 (0) + 1000@0.2 (60)": {
+   "strata": [
+    [
+     400,
+     0.5,
+     0
+    ],
+    [
+     1000,
+     0.2,
+     60
+    ]
+   ],
+   "cases": 1400,
+   "true": 0.04285714285714286,
+   "before": {
+    "coverage": 0.958,
+    "lo_above_truth": 0.01625,
+    "hi_below_truth": 0.02575,
+    "mean_width": 0.044251739709160305
+   },
+   "after": {
+    "coverage": 0.9662499999999999,
+    "lo_above_truth": 0.016,
+    "hi_below_truth": 0.01775,
+    "mean_width": 0.04579592029842216
+   }
+  },
+  "400@0.5 (0) + 1000@0.05 (10)": {
+   "strata": [
+    [
+     400,
+     0.5,
+     0
+    ],
+    [
+     1000,
+     0.05,
+     10
+    ]
+   ],
+   "cases": 1400,
+   "true": 0.007142857142857143,
+   "before": {
+    "coverage": 0.98675,
+    "lo_above_truth": 0.01325,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.03161961695466073
+   },
+   "after": {
+    "coverage": 0.98675,
+    "lo_above_truth": 0.01325,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.06229660098971295
+   }
+  },
+  "300@0.5 (30) + 1000@0.2 (30)": {
+   "strata": [
+    [
+     300,
+     0.5,
+     30
+    ],
+    [
+     1000,
+     0.2,
+     30
+    ]
+   ],
+   "cases": 1300,
+   "true": 0.046153846153846156,
+   "before": {
+    "coverage": 0.9610000000000001,
+    "lo_above_truth": 0.0155,
+    "hi_below_truth": 0.0235,
+    "mean_width": 0.039097822103511204
+   },
+   "after": {
+    "coverage": 0.96875,
+    "lo_above_truth": 0.0155,
+    "hi_below_truth": 0.01575,
+    "mean_width": 0.04067569246719326
+   }
+  },
+  "300@0.5 (150) + 1000@0.2 (300)": {
+   "strata": [
+    [
+     300,
+     0.5,
+     150
+    ],
+    [
+     1000,
+     0.2,
+     300
+    ]
+   ],
+   "cases": 1300,
+   "true": 0.34615384615384615,
+   "before": {
+    "coverage": 0.95825,
+    "lo_above_truth": 0.0195,
+    "hi_below_truth": 0.02225,
+    "mean_width": 0.09445682144755804
+   },
+   "after": {
+    "coverage": 0.96025,
+    "lo_above_truth": 0.01925,
+    "hi_below_truth": 0.0205,
+    "mean_width": 0.09548887457995238
+   }
+  },
+  "arithmetic 74@0.5 (3) + 107@0.2 (0)": {
+   "strata": [
+    [
+     74,
+     0.5,
+     3
+    ],
+    [
+     107,
+     0.2,
+     0
+    ]
+   ],
+   "cases": 181,
+   "true": 0.016574585635359115,
+   "before": {
+    "coverage": 0.99975,
+    "lo_above_truth": 0.00025,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.06934744873604706
+   },
+   "after": {
+    "coverage": 0.99975,
+    "lo_above_truth": 0.00025,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.10136038560212113
+   }
+  },
+  "MMLU-Pro opus 620@0.5 (67) + 724@0.2 (15)": {
+   "strata": [
+    [
+     620,
+     0.5,
+     67
+    ],
+    [
+     724,
+     0.2,
+     15
+    ]
+   ],
+   "cases": 1344,
+   "true": 0.06101190476190476,
+   "before": {
+    "coverage": 0.95475,
+    "lo_above_truth": 0.02075,
+    "hi_below_truth": 0.0245,
+    "mean_width": 0.034777403640641615
+   },
+   "after": {
+    "coverage": 0.96825,
+    "lo_above_truth": 0.02025,
+    "hi_below_truth": 0.0115,
+    "mean_width": 0.037128661439204944
+   }
+  },
+  "MMLU-Pro sonnet 620@0.5 (49) + 724@0.2 (11)": {
+   "strata": [
+    [
+     620,
+     0.5,
+     49
+    ],
+    [
+     724,
+     0.2,
+     11
+    ]
+   ],
+   "cases": 1344,
+   "true": 0.044642857142857144,
+   "before": {
+    "coverage": 0.9595,
+    "lo_above_truth": 0.0175,
+    "hi_below_truth": 0.023,
+    "mean_width": 0.03011866905761791
+   },
+   "after": {
+    "coverage": 0.9725,
+    "lo_above_truth": 0.0175,
+    "hi_below_truth": 0.01,
+    "mean_width": 0.03266024691483744
+   }
+  },
+  "BBH opus 96@0.5 (11) + 370@0.2 (4)": {
+   "strata": [
+    [
+     96,
+     0.5,
+     11
+    ],
+    [
+     370,
+     0.2,
+     4
+    ]
+   ],
+   "cases": 466,
+   "true": 0.032188841201716736,
+   "before": {
+    "coverage": 0.992,
+    "lo_above_truth": 0.00675,
+    "hi_below_truth": 0.00125,
+    "mean_width": 0.05359567775830496
+   },
+   "after": {
+    "coverage": 0.99325,
+    "lo_above_truth": 0.00675,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.059574381827205584
+   }
+  },
+  "BBH sonnet 96@0.5 (10) + 370@0.2 (3)": {
+   "strata": [
+    [
+     96,
+     0.5,
+     10
+    ],
+    [
+     370,
+     0.2,
+     3
+    ]
+   ],
+   "cases": 466,
+   "true": 0.027896995708154508,
+   "before": {
+    "coverage": 0.9925,
+    "lo_above_truth": 0.0075,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.04992894732086545
+   },
+   "after": {
+    "coverage": 0.993,
+    "lo_above_truth": 0.007,
+    "hi_below_truth": 0.0,
+    "mean_width": 0.0561996723902107
+   }
+  }
+ },
+ "grid_worst": [
+  {
+   "expected_audits": 2,
+   "worst_hi_below": 0.1415,
+   "worst_lo_above": 0.0175
+  },
+  {
+   "expected_audits": 3,
+   "worst_hi_below": 0.049,
+   "worst_lo_above": 0.0175
+  },
+  {
+   "expected_audits": 5,
+   "worst_hi_below": 0.0095,
+   "worst_lo_above": 0.0185
+  },
+  {
+   "expected_audits": 10,
+   "worst_hi_below": 0.0145,
+   "worst_lo_above": 0.022
+  },
+  {
+   "expected_audits": 20,
+   "worst_hi_below": 0.0165,
+   "worst_lo_above": 0.023
+  },
+  {
+   "expected_audits": 50,
+   "worst_hi_below": 0.0185,
+   "worst_lo_above": 0.022
+  }
+ ],
+ "grid": [
+  {
+   "pi": 0.01,
+   "expected_audits": 2,
+   "cases": 200,
+   "disagreements": 50,
+   "coverage": 0.8495,
+   "lo_above_truth": 0.009,
+   "hi_below_truth": 0.1415,
+   "mean_width": 0.43891387038561763
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 2,
+   "cases": 200,
+   "disagreements": 100,
+   "coverage": 0.8490000000000001,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.1415,
+   "mean_width": 0.48643680142645773
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 2,
+   "cases": 200,
+   "disagreements": 200,
+   "coverage": 0.8505,
+   "lo_above_truth": 0.008,
+   "hi_below_truth": 0.1415,
+   "mean_width": 0.5302689419784468
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 2,
+   "cases": 200,
+   "disagreements": 200,
+   "coverage": 0.8505,
+   "lo_above_truth": 0.008,
+   "hi_below_truth": 0.1415,
+   "mean_width": 0.5302689419784468
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 2,
+   "cases": 200,
+   "disagreements": 200,
+   "coverage": 0.8505,
+   "lo_above_truth": 0.008,
+   "hi_below_truth": 0.1415,
+   "mean_width": 0.5302689419784468
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 2,
+   "cases": 200,
+   "disagreements": 200,
+   "coverage": 0.8505,
+   "lo_above_truth": 0.008,
+   "hi_below_truth": 0.1415,
+   "mean_width": 0.5302689419784468
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 3,
+   "cases": 300,
+   "disagreements": 50,
+   "coverage": 0.9435,
+   "lo_above_truth": 0.0075,
+   "hi_below_truth": 0.049,
+   "mean_width": 0.4452831303295549
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 3,
+   "cases": 300,
+   "disagreements": 100,
+   "coverage": 0.9445,
+   "lo_above_truth": 0.0065,
+   "hi_below_truth": 0.049,
+   "mean_width": 0.4939826247056787
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 3,
+   "cases": 300,
+   "disagreements": 200,
+   "coverage": 0.945,
+   "lo_above_truth": 0.006,
+   "hi_below_truth": 0.049,
+   "mean_width": 0.5491248951431329
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 3,
+   "cases": 300,
+   "disagreements": 300,
+   "coverage": 0.9445,
+   "lo_above_truth": 0.0065,
+   "hi_below_truth": 0.049,
+   "mean_width": 0.5567765947682565
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 3,
+   "cases": 300,
+   "disagreements": 300,
+   "coverage": 0.9445,
+   "lo_above_truth": 0.0065,
+   "hi_below_truth": 0.049,
+   "mean_width": 0.5567765947682565
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 3,
+   "cases": 300,
+   "disagreements": 300,
+   "coverage": 0.9445,
+   "lo_above_truth": 0.0065,
+   "hi_below_truth": 0.049,
+   "mean_width": 0.5567765947682565
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 5,
+   "cases": 500,
+   "disagreements": 50,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.39772514252738417
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 5,
+   "cases": 500,
+   "disagreements": 100,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.44534461884488513
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 5,
+   "cases": 500,
+   "disagreements": 200,
+   "coverage": 0.9845,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.5085150585285932
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 5,
+   "cases": 500,
+   "disagreements": 300,
+   "coverage": 0.9830000000000001,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.0075,
+   "mean_width": 0.5397850275990377
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 5,
+   "cases": 500,
+   "disagreements": 500,
+   "coverage": 0.993,
+   "lo_above_truth": 0.002,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.5111940328204402
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 5,
+   "cases": 500,
+   "disagreements": 500,
+   "coverage": 0.993,
+   "lo_above_truth": 0.002,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.5111940328204402
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 10,
+   "cases": 1000,
+   "disagreements": 50,
+   "coverage": 0.9915,
+   "lo_above_truth": 0.0085,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.2849428357557801
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 10,
+   "cases": 1000,
+   "disagreements": 100,
+   "coverage": 0.9895,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.3246673920307244
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 10,
+   "cases": 1000,
+   "disagreements": 200,
+   "coverage": 0.9895,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.38438555540435465
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 10,
+   "cases": 1000,
+   "disagreements": 300,
+   "coverage": 0.9795,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.42766871148302804
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 10,
+   "cases": 1000,
+   "disagreements": 500,
+   "coverage": 0.9725,
+   "lo_above_truth": 0.02,
+   "hi_below_truth": 0.0075,
+   "mean_width": 0.472761539229432
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 10,
+   "cases": 1000,
+   "disagreements": 1000,
+   "coverage": 0.9970000000000001,
+   "lo_above_truth": 0.0015,
+   "hi_below_truth": 0.0015,
+   "mean_width": 0.35677744651160437
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 20,
+   "cases": 2000,
+   "disagreements": 50,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.1773058709889022
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 20,
+   "cases": 2000,
+   "disagreements": 100,
+   "coverage": 0.9895,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.20453594567955174
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 20,
+   "cases": 2000,
+   "disagreements": 200,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.2480711038666495
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 20,
+   "cases": 2000,
+   "disagreements": 300,
+   "coverage": 0.9820000000000001,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0035,
+   "mean_width": 0.283558490378073
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 20,
+   "cases": 2000,
+   "disagreements": 500,
+   "coverage": 0.9755,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.01,
+   "mean_width": 0.33497728998191734
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 20,
+   "cases": 2000,
+   "disagreements": 1000,
+   "coverage": 0.9740000000000001,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.0125,
+   "mean_width": 0.38528764803774923
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 50,
+   "cases": 5000,
+   "disagreements": 50,
+   "coverage": 0.9895,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.082513371354741
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 50,
+   "cases": 5000,
+   "disagreements": 100,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.09606570301619895
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 50,
+   "cases": 5000,
+   "disagreements": 200,
+   "coverage": 0.9905,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.11843220382751754
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 50,
+   "cases": 5000,
+   "disagreements": 300,
+   "coverage": 0.9845,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.001,
+   "mean_width": 0.13765040280431778
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 50,
+   "cases": 5000,
+   "disagreements": 500,
+   "coverage": 0.9795,
+   "lo_above_truth": 0.0125,
+   "hi_below_truth": 0.008,
+   "mean_width": 0.16811768401534863
+  },
+  {
+   "pi": 0.01,
+   "expected_audits": 50,
+   "cases": 5000,
+   "disagreements": 1000,
+   "coverage": 0.9685,
+   "lo_above_truth": 0.018,
+   "hi_below_truth": 0.0135,
+   "mean_width": 0.21751524856798307
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 2,
+   "cases": 100,
+   "disagreements": 25,
+   "coverage": 0.8594999999999999,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.1285,
+   "mean_width": 0.30941403010019974
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 2,
+   "cases": 100,
+   "disagreements": 50,
+   "coverage": 0.8585,
+   "lo_above_truth": 0.013,
+   "hi_below_truth": 0.1285,
+   "mean_width": 0.3520147376066199
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 2,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.8594999999999999,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.1285,
+   "mean_width": 0.40852590190902693
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 2,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.8594999999999999,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.1285,
+   "mean_width": 0.40852590190902693
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 2,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.8594999999999999,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.1285,
+   "mean_width": 0.40852590190902693
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 2,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.8594999999999999,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.1285,
+   "mean_width": 0.40852590190902693
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 3,
+   "cases": 150,
+   "disagreements": 25,
+   "coverage": 0.9425,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.0455,
+   "mean_width": 0.31481173206511565
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 3,
+   "cases": 150,
+   "disagreements": 50,
+   "coverage": 0.9425,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.0455,
+   "mean_width": 0.3563969124059585
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 3,
+   "cases": 150,
+   "disagreements": 100,
+   "coverage": 0.9425,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.0455,
+   "mean_width": 0.4140519306997138
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 3,
+   "cases": 150,
+   "disagreements": 150,
+   "coverage": 0.9440000000000001,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0455,
+   "mean_width": 0.44462528358036074
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 3,
+   "cases": 150,
+   "disagreements": 150,
+   "coverage": 0.9440000000000001,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0455,
+   "mean_width": 0.44462528358036074
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 3,
+   "cases": 150,
+   "disagreements": 150,
+   "coverage": 0.9440000000000001,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0455,
+   "mean_width": 0.44462528358036074
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 5,
+   "cases": 250,
+   "disagreements": 25,
+   "coverage": 0.9835,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.2911600221884643
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 5,
+   "cases": 250,
+   "disagreements": 50,
+   "coverage": 0.9840000000000001,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.3305490003522116
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 5,
+   "cases": 250,
+   "disagreements": 100,
+   "coverage": 0.9830000000000001,
+   "lo_above_truth": 0.0125,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.3878935085022076
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 5,
+   "cases": 250,
+   "disagreements": 150,
+   "coverage": 0.9815,
+   "lo_above_truth": 0.014,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.4239629961568643
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 5,
+   "cases": 250,
+   "disagreements": 250,
+   "coverage": 0.9880000000000001,
+   "lo_above_truth": 0.0075,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.44283200062477734
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 5,
+   "cases": 250,
+   "disagreements": 250,
+   "coverage": 0.9880000000000001,
+   "lo_above_truth": 0.0075,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.44283200062477734
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 10,
+   "cases": 500,
+   "disagreements": 25,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.22417068614210522
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 10,
+   "cases": 500,
+   "disagreements": 50,
+   "coverage": 0.988,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.25734582625357144
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 10,
+   "cases": 500,
+   "disagreements": 100,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.30863935272566445
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 10,
+   "cases": 500,
+   "disagreements": 150,
+   "coverage": 0.9840000000000001,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0015,
+   "mean_width": 0.3464358272534237
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 10,
+   "cases": 500,
+   "disagreements": 250,
+   "coverage": 0.978,
+   "lo_above_truth": 0.013,
+   "hi_below_truth": 0.009,
+   "mean_width": 0.38968636287901814
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 10,
+   "cases": 500,
+   "disagreements": 500,
+   "coverage": 0.9915,
+   "lo_above_truth": 0.006,
+   "hi_below_truth": 0.0025,
+   "mean_width": 0.357387774803899
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 20,
+   "cases": 1000,
+   "disagreements": 25,
+   "coverage": 0.988,
+   "lo_above_truth": 0.012,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.15174804365910716
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 20,
+   "cases": 1000,
+   "disagreements": 50,
+   "coverage": 0.9875,
+   "lo_above_truth": 0.0125,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.17598957883303928
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 20,
+   "cases": 1000,
+   "disagreements": 100,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.2149909233459005
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 20,
+   "cases": 1000,
+   "disagreements": 150,
+   "coverage": 0.9825,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0025,
+   "mean_width": 0.24598807600694947
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 20,
+   "cases": 1000,
+   "disagreements": 250,
+   "coverage": 0.9745,
+   "lo_above_truth": 0.014,
+   "hi_below_truth": 0.0115,
+   "mean_width": 0.28967822844122204
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 20,
+   "cases": 1000,
+   "disagreements": 500,
+   "coverage": 0.9740000000000001,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.0125,
+   "mean_width": 0.3396002615019937
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 50,
+   "cases": 2500,
+   "disagreements": 25,
+   "coverage": 0.9875,
+   "lo_above_truth": 0.0125,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.07615233583021913
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 50,
+   "cases": 2500,
+   "disagreements": 50,
+   "coverage": 0.9865,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.08903645417092035
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 50,
+   "cases": 2500,
+   "disagreements": 100,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.11028788068489756
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 50,
+   "cases": 2500,
+   "disagreements": 150,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.001,
+   "mean_width": 0.1279689119369125
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 50,
+   "cases": 2500,
+   "disagreements": 250,
+   "coverage": 0.974,
+   "lo_above_truth": 0.014,
+   "hi_below_truth": 0.012,
+   "mean_width": 0.1553303598755392
+  },
+  {
+   "pi": 0.02,
+   "expected_audits": 50,
+   "cases": 2500,
+   "disagreements": 500,
+   "coverage": 0.9725,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0125,
+   "mean_width": 0.20188875767213194
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 2,
+   "cases": 40,
+   "disagreements": 10,
+   "coverage": 0.8645,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.1245,
+   "mean_width": 0.1609622881565045
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 2,
+   "cases": 40,
+   "disagreements": 20,
+   "coverage": 0.8580000000000001,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.1245,
+   "mean_width": 0.18807595968885454
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 2,
+   "cases": 40,
+   "disagreements": 40,
+   "coverage": 0.8640000000000001,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.1245,
+   "mean_width": 0.230692185212873
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 2,
+   "cases": 40,
+   "disagreements": 40,
+   "coverage": 0.8640000000000001,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.1245,
+   "mean_width": 0.230692185212873
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 2,
+   "cases": 40,
+   "disagreements": 40,
+   "coverage": 0.8640000000000001,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.1245,
+   "mean_width": 0.230692185212873
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 2,
+   "cases": 40,
+   "disagreements": 40,
+   "coverage": 0.8640000000000001,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.1245,
+   "mean_width": 0.230692185212873
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 3,
+   "cases": 60,
+   "disagreements": 10,
+   "coverage": 0.948,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.041,
+   "mean_width": 0.1666449092014482
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 3,
+   "cases": 60,
+   "disagreements": 20,
+   "coverage": 0.943,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.041,
+   "mean_width": 0.1929772797501052
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 3,
+   "cases": 60,
+   "disagreements": 40,
+   "coverage": 0.948,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.041,
+   "mean_width": 0.23468575477726972
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 3,
+   "cases": 60,
+   "disagreements": 60,
+   "coverage": 0.944,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.041,
+   "mean_width": 0.26517959502890787
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 3,
+   "cases": 60,
+   "disagreements": 60,
+   "coverage": 0.944,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.041,
+   "mean_width": 0.26517959502890787
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 3,
+   "cases": 60,
+   "disagreements": 60,
+   "coverage": 0.944,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.041,
+   "mean_width": 0.26517959502890787
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 5,
+   "cases": 100,
+   "disagreements": 10,
+   "coverage": 0.984,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.16041477588545328
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 5,
+   "cases": 100,
+   "disagreements": 20,
+   "coverage": 0.9785,
+   "lo_above_truth": 0.0165,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.1853750154487404
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 5,
+   "cases": 100,
+   "disagreements": 40,
+   "coverage": 0.9835,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.22531698178829715
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 5,
+   "cases": 100,
+   "disagreements": 60,
+   "coverage": 0.979,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.25515769463507404
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 5,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.979,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.291768280796407
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 5,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.979,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.291768280796407
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 10,
+   "cases": 200,
+   "disagreements": 10,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.13756901361730492
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 10,
+   "cases": 200,
+   "disagreements": 20,
+   "coverage": 0.9845,
+   "lo_above_truth": 0.0155,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.1595400302355326
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 10,
+   "cases": 200,
+   "disagreements": 40,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.19526549351939793
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 10,
+   "cases": 200,
+   "disagreements": 60,
+   "coverage": 0.981,
+   "lo_above_truth": 0.019,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.22295727133762547
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 10,
+   "cases": 200,
+   "disagreements": 100,
+   "coverage": 0.9795,
+   "lo_above_truth": 0.0155,
+   "hi_below_truth": 0.005,
+   "mean_width": 0.2600571175999785
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 10,
+   "cases": 200,
+   "disagreements": 200,
+   "coverage": 0.9765,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0085,
+   "mean_width": 0.2916618842137322
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 20,
+   "cases": 400,
+   "disagreements": 10,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.10562270457152825
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 20,
+   "cases": 400,
+   "disagreements": 20,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.12312055166620244
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 20,
+   "cases": 400,
+   "disagreements": 40,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.15205737267155833
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 20,
+   "cases": 400,
+   "disagreements": 60,
+   "coverage": 0.982,
+   "lo_above_truth": 0.017,
+   "hi_below_truth": 0.001,
+   "mean_width": 0.17525873354786609
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 20,
+   "cases": 400,
+   "disagreements": 100,
+   "coverage": 0.9750000000000001,
+   "lo_above_truth": 0.0185,
+   "hi_below_truth": 0.0065,
+   "mean_width": 0.2086713752810939
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 20,
+   "cases": 400,
+   "disagreements": 200,
+   "coverage": 0.9720000000000001,
+   "lo_above_truth": 0.0155,
+   "hi_below_truth": 0.0125,
+   "mean_width": 0.253694489473041
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 50,
+   "cases": 1000,
+   "disagreements": 10,
+   "coverage": 0.989,
+   "lo_above_truth": 0.011,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.0621705145231748
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 50,
+   "cases": 1000,
+   "disagreements": 20,
+   "coverage": 0.985,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.07284802896205948
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 50,
+   "cases": 1000,
+   "disagreements": 40,
+   "coverage": 0.99,
+   "lo_above_truth": 0.01,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.09087359276070771
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 50,
+   "cases": 1000,
+   "disagreements": 60,
+   "coverage": 0.982,
+   "lo_above_truth": 0.017,
+   "hi_below_truth": 0.001,
+   "mean_width": 0.10580836764138404
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 50,
+   "cases": 1000,
+   "disagreements": 100,
+   "coverage": 0.977,
+   "lo_above_truth": 0.017,
+   "hi_below_truth": 0.006,
+   "mean_width": 0.12856566896053928
+  },
+  {
+   "pi": 0.05,
+   "expected_audits": 50,
+   "cases": 1000,
+   "disagreements": 200,
+   "coverage": 0.9640000000000001,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.0185,
+   "mean_width": 0.16663714139425032
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 2,
+   "cases": 20,
+   "disagreements": 5,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.08873684700335512
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 2,
+   "cases": 20,
+   "disagreements": 10,
+   "coverage": 0.8560000000000001,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.1295,
+   "mean_width": 0.10407639334968768
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 2,
+   "cases": 20,
+   "disagreements": 20,
+   "coverage": 0.857,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.1295,
+   "mean_width": 0.12999321987904008
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 2,
+   "cases": 20,
+   "disagreements": 20,
+   "coverage": 0.857,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.1295,
+   "mean_width": 0.12999321987904008
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 2,
+   "cases": 20,
+   "disagreements": 20,
+   "coverage": 0.857,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.1295,
+   "mean_width": 0.12999321987904008
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 2,
+   "cases": 20,
+   "disagreements": 20,
+   "coverage": 0.857,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.1295,
+   "mean_width": 0.12999321987904008
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 3,
+   "cases": 30,
+   "disagreements": 5,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.09219772318630606
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 3,
+   "cases": 30,
+   "disagreements": 10,
+   "coverage": 0.937,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0485,
+   "mean_width": 0.10725286778907957
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 3,
+   "cases": 30,
+   "disagreements": 20,
+   "coverage": 0.9380000000000001,
+   "lo_above_truth": 0.0135,
+   "hi_below_truth": 0.0485,
+   "mean_width": 0.13269737535553286
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 3,
+   "cases": 30,
+   "disagreements": 30,
+   "coverage": 0.934,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.0485,
+   "mean_width": 0.15368417826650632
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 3,
+   "cases": 30,
+   "disagreements": 30,
+   "coverage": 0.934,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.0485,
+   "mean_width": 0.15368417826650632
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 3,
+   "cases": 30,
+   "disagreements": 30,
+   "coverage": 0.934,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.0485,
+   "mean_width": 0.15368417826650632
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 5,
+   "cases": 50,
+   "disagreements": 5,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.09131872797807108
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 5,
+   "cases": 50,
+   "disagreements": 10,
+   "coverage": 0.9795,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.006,
+   "mean_width": 0.10582341521225276
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 5,
+   "cases": 50,
+   "disagreements": 20,
+   "coverage": 0.98,
+   "lo_above_truth": 0.014,
+   "hi_below_truth": 0.006,
+   "mean_width": 0.13042057769027945
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 5,
+   "cases": 50,
+   "disagreements": 30,
+   "coverage": 0.978,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.006,
+   "mean_width": 0.15082284404727958
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 5,
+   "cases": 50,
+   "disagreements": 50,
+   "coverage": 0.9745,
+   "lo_above_truth": 0.0185,
+   "hi_below_truth": 0.007,
+   "mean_width": 0.1793573200496451
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 5,
+   "cases": 50,
+   "disagreements": 50,
+   "coverage": 0.9745,
+   "lo_above_truth": 0.0185,
+   "hi_below_truth": 0.007,
+   "mean_width": 0.1793573200496451
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 10,
+   "cases": 100,
+   "disagreements": 5,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.08328421466339385
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 10,
+   "cases": 100,
+   "disagreements": 10,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.09656407273643398
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 10,
+   "cases": 100,
+   "disagreements": 20,
+   "coverage": 0.985,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.11926024082465808
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 10,
+   "cases": 100,
+   "disagreements": 30,
+   "coverage": 0.985,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.13824385948057277
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 10,
+   "cases": 100,
+   "disagreements": 50,
+   "coverage": 0.9750000000000001,
+   "lo_above_truth": 0.0165,
+   "hi_below_truth": 0.0085,
+   "mean_width": 0.1653293158188435
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 10,
+   "cases": 100,
+   "disagreements": 100,
+   "coverage": 0.9675,
+   "lo_above_truth": 0.022,
+   "hi_below_truth": 0.0105,
+   "mean_width": 0.2034143537080441
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 20,
+   "cases": 200,
+   "disagreements": 5,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.07032070817382523
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 20,
+   "cases": 200,
+   "disagreements": 10,
+   "coverage": 0.986,
+   "lo_above_truth": 0.014,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.08170445068886462
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 20,
+   "cases": 200,
+   "disagreements": 20,
+   "coverage": 0.9845,
+   "lo_above_truth": 0.0155,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.1012542817267858
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 20,
+   "cases": 200,
+   "disagreements": 30,
+   "coverage": 0.983,
+   "lo_above_truth": 0.017,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.11786263687232902
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 20,
+   "cases": 200,
+   "disagreements": 50,
+   "coverage": 0.9700000000000001,
+   "lo_above_truth": 0.0205,
+   "hi_below_truth": 0.0095,
+   "mean_width": 0.14209795639695957
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 20,
+   "cases": 200,
+   "disagreements": 100,
+   "coverage": 0.966,
+   "lo_above_truth": 0.023,
+   "hi_below_truth": 0.011,
+   "mean_width": 0.17953384544199938
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 50,
+   "cases": 500,
+   "disagreements": 5,
+   "coverage": 0.9885,
+   "lo_above_truth": 0.0115,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.04759823804714719
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 50,
+   "cases": 500,
+   "disagreements": 10,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.05548516370083989
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 50,
+   "cases": 500,
+   "disagreements": 20,
+   "coverage": 0.985,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.06913319840634104
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 50,
+   "cases": 500,
+   "disagreements": 30,
+   "coverage": 0.984,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.08095939070785826
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 50,
+   "cases": 500,
+   "disagreements": 50,
+   "coverage": 0.9700000000000001,
+   "lo_above_truth": 0.0195,
+   "hi_below_truth": 0.0105,
+   "mean_width": 0.09872808327420457
+  },
+  {
+   "pi": 0.1,
+   "expected_audits": 50,
+   "cases": 500,
+   "disagreements": 100,
+   "coverage": 0.963,
+   "lo_above_truth": 0.022,
+   "hi_below_truth": 0.015,
+   "mean_width": 0.12908822142813184
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 2,
+   "cases": 10,
+   "disagreements": 2,
+   "coverage": 1.0,
+   "lo_above_truth": 0.0,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.04430974359820339
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 2,
+   "cases": 10,
+   "disagreements": 5,
+   "coverage": 0.9940000000000001,
+   "lo_above_truth": 0.0055,
+   "hi_below_truth": 0.0005,
+   "mean_width": 0.05436790058816487
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 2,
+   "cases": 10,
+   "disagreements": 10,
+   "coverage": 0.879,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.1105,
+   "mean_width": 0.06854619035360049
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 2,
+   "cases": 10,
+   "disagreements": 10,
+   "coverage": 0.879,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.1105,
+   "mean_width": 0.06854619035360049
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 2,
+   "cases": 10,
+   "disagreements": 10,
+   "coverage": 0.879,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.1105,
+   "mean_width": 0.06854619035360049
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 2,
+   "cases": 10,
+   "disagreements": 10,
+   "coverage": 0.879,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.1105,
+   "mean_width": 0.06854619035360049
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 3,
+   "cases": 15,
+   "disagreements": 2,
+   "coverage": 1.0,
+   "lo_above_truth": 0.0,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.045684952064633966
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 3,
+   "cases": 15,
+   "disagreements": 5,
+   "coverage": 0.9945,
+   "lo_above_truth": 0.0055,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.05563901754676405
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 3,
+   "cases": 15,
+   "disagreements": 10,
+   "coverage": 0.9495,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.04,
+   "mean_width": 0.06966747873405107
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 3,
+   "cases": 15,
+   "disagreements": 15,
+   "coverage": 0.945,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.04,
+   "mean_width": 0.08056713502419041
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 3,
+   "cases": 15,
+   "disagreements": 15,
+   "coverage": 0.945,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.04,
+   "mean_width": 0.08056713502419041
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 3,
+   "cases": 15,
+   "disagreements": 15,
+   "coverage": 0.945,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.04,
+   "mean_width": 0.08056713502419041
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 5,
+   "cases": 25,
+   "disagreements": 2,
+   "coverage": 1.0,
+   "lo_above_truth": 0.0,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.04559530258157335
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 5,
+   "cases": 25,
+   "disagreements": 5,
+   "coverage": 0.9945,
+   "lo_above_truth": 0.0055,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.0553378809938056
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 5,
+   "cases": 25,
+   "disagreements": 10,
+   "coverage": 0.9860000000000001,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.06907708656814714
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 5,
+   "cases": 25,
+   "disagreements": 15,
+   "coverage": 0.9805,
+   "lo_above_truth": 0.015,
+   "hi_below_truth": 0.0045,
+   "mean_width": 0.07975567101320652
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 5,
+   "cases": 25,
+   "disagreements": 25,
+   "coverage": 0.9730000000000001,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.0095,
+   "mean_width": 0.09744589834242369
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 5,
+   "cases": 25,
+   "disagreements": 25,
+   "coverage": 0.9730000000000001,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.0095,
+   "mean_width": 0.09744589834242369
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 10,
+   "cases": 50,
+   "disagreements": 2,
+   "coverage": 1.0,
+   "lo_above_truth": 0.0,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.043273042847099034
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 10,
+   "cases": 50,
+   "disagreements": 5,
+   "coverage": 0.9945,
+   "lo_above_truth": 0.0055,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.05251821685761699
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 10,
+   "cases": 50,
+   "disagreements": 10,
+   "coverage": 0.9895,
+   "lo_above_truth": 0.0105,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.06557063208624694
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 10,
+   "cases": 50,
+   "disagreements": 15,
+   "coverage": 0.9850000000000001,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0005,
+   "mean_width": 0.0757438248452667
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 10,
+   "cases": 50,
+   "disagreements": 25,
+   "coverage": 0.9715,
+   "lo_above_truth": 0.0175,
+   "hi_below_truth": 0.011,
+   "mean_width": 0.09265653677732762
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 10,
+   "cases": 50,
+   "disagreements": 50,
+   "coverage": 0.9695,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.0145,
+   "mean_width": 0.12008170490680342
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 20,
+   "cases": 100,
+   "disagreements": 2,
+   "coverage": 1.0,
+   "lo_above_truth": 0.0,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.03911287951111939
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 20,
+   "cases": 100,
+   "disagreements": 5,
+   "coverage": 0.9945,
+   "lo_above_truth": 0.0055,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.04750884498282942
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 20,
+   "cases": 100,
+   "disagreements": 10,
+   "coverage": 0.9905,
+   "lo_above_truth": 0.0095,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.05937809646145441
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 20,
+   "cases": 100,
+   "disagreements": 15,
+   "coverage": 0.9835,
+   "lo_above_truth": 0.016,
+   "hi_below_truth": 0.0005,
+   "mean_width": 0.06866677031246086
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 20,
+   "cases": 100,
+   "disagreements": 25,
+   "coverage": 0.9735,
+   "lo_above_truth": 0.0165,
+   "hi_below_truth": 0.01,
+   "mean_width": 0.08420830840652001
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 20,
+   "cases": 100,
+   "disagreements": 50,
+   "coverage": 0.9680000000000001,
+   "lo_above_truth": 0.0155,
+   "hi_below_truth": 0.0165,
+   "mean_width": 0.10994076200663398
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 50,
+   "cases": 250,
+   "disagreements": 2,
+   "coverage": 1.0,
+   "lo_above_truth": 0.0,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.030286010901983348
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 50,
+   "cases": 250,
+   "disagreements": 5,
+   "coverage": 0.9945,
+   "lo_above_truth": 0.0055,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.0368567080461723
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 50,
+   "cases": 250,
+   "disagreements": 10,
+   "coverage": 0.9915,
+   "lo_above_truth": 0.0085,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.04617393579785102
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 50,
+   "cases": 250,
+   "disagreements": 15,
+   "coverage": 0.9855,
+   "lo_above_truth": 0.0145,
+   "hi_below_truth": 0.0,
+   "mean_width": 0.05351680991984694
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 50,
+   "cases": 250,
+   "disagreements": 25,
+   "coverage": 0.974,
+   "lo_above_truth": 0.017,
+   "hi_below_truth": 0.009,
+   "mean_width": 0.06592927180004483
+  },
+  {
+   "pi": 0.2,
+   "expected_audits": 50,
+   "cases": 250,
+   "disagreements": 50,
+   "coverage": 0.9690000000000001,
+   "lo_above_truth": 0.0155,
+   "hi_below_truth": 0.0155,
+   "mean_width": 0.08722328029150173
+  }
+ ]
+}

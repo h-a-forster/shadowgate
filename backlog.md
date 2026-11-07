@@ -17,8 +17,10 @@
 
 ## Proposed
 
-- The audit interval is closer to 95% at low disagreement counts: it still covers 98.9-100% on
-  BBH and arithmetic, where 3-15 skipped cases disagree.
+- The audit interval is closer to 95% at low disagreement counts: it still covers 99.0-100% on
+  BBH and arithmetic, where 3-15 skipped cases disagree, and arithmetic never reaches `ok`.
+- A stratum under five expected audits and under 10% of skipped cases cannot give a false `ok`:
+  today only strata with at least 10% block it.
 - `svg.py` (1,505 lines of hand-rolled charts) stops being a maintenance liability, by tests on
   its output or a smaller scope.
 - Repeated audit checks have a valid status (an anytime-valid confidence sequence), so

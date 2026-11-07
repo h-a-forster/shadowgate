@@ -135,15 +135,23 @@ which is consistent for the disagreement rate over all skipped cases (Horvitz & 
 Hájek, 1971). The interval is a Korn-Graubard beta interval matched to the design variance, with
 two adjustments. Audits are drawn without replacement from a known set of skipped cases, so each
 audit's variance carries a factor 1 - πᵢ: the more of a stratum is audited, the less is left
-unknown. And each bound adds one hypothetical audit of mean weight (a disagreement for the upper
-bound, an agreement for the lower), because disagreements missed in a heavily weighted stratum
-would otherwise make the interval too narrow on the side that hides them. Unequal weights widen
+unknown. And each bound adds one hypothetical audit at the largest weight in the sample (a
+disagreement for the upper bound, an agreement for the lower), after Fay & Feuer: a heavily weighted
+stratum can hide its disagreements from a draw altogether, and the bound has to allow for one at
+that weight. Unequal weights widen
 the interval and sampling a large share narrows it, so the reported `n_eff` (the smaller of the
 Kish and variance-matched sizes, with the same factors) can exceed the number of audits.
 
 The interval is about the skipped cases of this run, not future traffic: at π = 1 nothing about
 this run is unknown, though the next run can differ. A run where every case is audited (eval mode)
 has no sampling error, so it keeps the ordinary interval, which describes the process.
+
+The interval needs about five expected audits (cases × π) in every stratum. Below that a stratum
+can go unaudited in a draw, and neither its disagreements nor its weight show up: the upper bound
+then misses with probability about e^(-cases × π), 14% at two expected audits, against 2.5%
+nominal. From five up, the upper bound missed under 2% of draws across a grid of heavy strata
+([check](results.md#interval-on-stressed-designs-offline)). Set the floor or the rates so each
+stratum clears this.
 
 Why the floor must be positive: a case with π = 0 can never be audited, so no weighting can
 recover its error rate. If the floor is very small, the few audits in that band carry large
@@ -171,7 +179,7 @@ Status: BREACH - Skipped-case error vs references exceeds tolerance 5%: the lowe
   above it.
 
 The fast tier (fast) answered 65% of 400 tasks without escalating. On those, it disagrees with slow
-  on an estimated 10.8% (95% CI 7.5-15.8%, 89 audits, n_eff 124). Against reference answers, the
+  on an estimated 10.8% (95% CI 7.5-16.0%, 89 audits, n_eff 124). Against reference answers, the
   skipped cases are wrong on 12.3% (95% CI 8.9-16.9%, 260 graded). That is about 32.0 wrong answers
   among the 260 skipped cases (23.0-43.8).
 
