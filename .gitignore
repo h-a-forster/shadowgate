@@ -18,3 +18,4 @@ runs/
 *.jsonl.lock
 *.inflight.json
 *.inflight.json.*.tmp
+backlog.md

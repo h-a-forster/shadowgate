@@ -54,4 +54,4 @@ matching `v<version>` tag; the release workflow checks the tag against the packa
 ## Status
 
 0.1.1 is prepared on branch `polish-2026-10-30`, not tagged or pushed. Open work lives in
-[backlog.md](backlog.md).
+`backlog.md`.
