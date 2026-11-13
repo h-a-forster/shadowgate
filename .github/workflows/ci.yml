@@ -51,6 +51,31 @@ jobs:
       - run: uv sync --all-groups --locked
       - run: uv run pytest
 
+  analyses:
+    # Rebuilds every published analysis from the committed decisions (offline, about 20 minutes
+    # for MMLU-Pro on a laptop) and the README's numbers from those; any diff fails.
+    name: Analyses rebuild from committed decisions
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-groups --locked
+      - name: Rebuild analyses and numbers
+        run: |
+          for e in mmlu-pro-cascade bbh-cascade; do
+            uv run python experiments/analyze_cascade.py "experiments/$e" \
+              --json "experiments/$e/analysis.json" > "experiments/$e/analysis.txt"
+          done
+          uv run python experiments/audit-interval/simulate_designs.py \
+            --json experiments/audit-interval/analysis.json > experiments/audit-interval/analysis.txt
+          uv run python experiments/doc_numbers.py
+          git diff --exit-code experiments/
+
   build:
     name: Build and smoke-test wheel
     runs-on: ubuntu-latest

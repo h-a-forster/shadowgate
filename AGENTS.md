@@ -28,7 +28,11 @@ decisions and offline analysis; `docs/results.md` reports them.
 - Secrets come only from environment variables named by `api_key_env`; never log, cache or
   write them to the ledger. Library code logs; only the CLI prints.
 - Results: every number in README.md and docs/results.md must trace to an experiment's
-  `analysis.txt` / `analysis.json` or its committed decisions. Re-running the experiments
+  `analysis.txt` / `analysis.json` or its committed decisions. `experiments/doc_numbers.py` writes
+  `experiments/numbers.json` from those, and `tests/test_docs.py` checks every README number
+  against it (or against the demo's output); CI's `analyses` job reruns the analyses and
+  `doc_numbers.py` and diffs `experiments/`. A new README number needs a key and a claim.
+  docs/results.md is not checked yet. Re-running the experiments
   costs real model spend (about $60 CLI-reported); the offline analysis does not.
 - Workflow actions are pinned to commit SHAs with a version comment; Dependabot updates both.
 - Scratch files go in `tmp/` (gitignored). The repository is public: change it through pull

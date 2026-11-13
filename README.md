@@ -211,7 +211,8 @@ The audit tracks disagreement: re-drawn 5000 times offline, its 95% interval cov
 disagreement rate of the run's skipped cases about 97% of the time on MMLU-Pro (99.0-99.5% on BBH,
 where few cases disagree). It needs about five expected audits in every stratum; below that a
 stratum can go unaudited and the bound can miss
-([regime](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#interval-on-stressed-designs-offline)). An earlier interval that ignored the finite population covered 99.8-100%
+([regime](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#interval-on-stressed-designs-offline)). An earlier interval that ignored the finite population covered 99.8-100% (from the
+code before the fix; not regenerated)
 ([correction](https://github.com/h-a-forster/shadowgate/blob/main/docs/results.md#coverage-check-offline-5000-seeds)).
 It covered the gold-graded error only 15.3% (Opus) and 0.08% (Sonnet) of the time, because the final
 tier repeats many of Haiku's mistakes. A weaker final tier repeats more of them and makes the
