@@ -86,7 +86,9 @@ def tails(design: Strata, seeds: int) -> dict[str, Any]:
             "coverage": 1.0 - low - high,
             "lo_above_truth": low,
             "hi_below_truth": high,
-            "mean_width": t["width"] / seeds,
+            # Interval endpoints come from libm functions whose last bit differs between
+            # platforms; 12 significant digits keep analysis.json identical on all of them.
+            "mean_width": float(f"{t['width'] / seeds:.12g}"),
         }
     return out
 
